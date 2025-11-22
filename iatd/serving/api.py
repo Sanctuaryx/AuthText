@@ -1,49 +1,55 @@
 from __future__ import annotations
 
+import json
 import os
+import pathlib
 
-import joblib
-import yaml
+import torch
 from flask import Flask, jsonify, request
 
-from iatd.features.featurizer import Featurizer, FeaturizerConfig
+from iatd.models.custom_bilstm import BiLSTMClassifier
+from iatd.models.vocab import Vocab, simple_tokenize
 
 app = Flask(__name__)
 
-FEATURES_CONFIG_PATH = os.getenv("FEATURES_CONFIG", "configs/features.yaml")
-MODEL_PATH = os.getenv("MODEL_PATH", "artifacts/baseline/baseline_svm.joblib")
-THRESHOLD = float(os.getenv("THRESHOLD", "0.6"))
+MODEL_DIR = os.getenv("MODEL_DIR", "artifacts/custom_model")
+THRESHOLD = float(os.getenv("THRESHOLD", "0.5"))
+MIN_WORDS = int(os.getenv("MIN_WORDS", "30"))
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-with open(FEATURES_CONFIG_PATH, "r", encoding="utf-8") as f:
-    feats_cfg = yaml.safe_load(f)
+# Cargar vocabulario
+with open(pathlib.Path(MODEL_DIR) / "vocab.json", "r", encoding="utf-8") as f:
+    vcfg = json.load(f)
 
-featurizer_cfg = FeaturizerConfig(
-    emb_model=feats_cfg["embeddings"]["model"],
-    ppl_model=feats_cfg["perplexity"]["model"],
-    normalize=feats_cfg["embeddings"]["normalize"],
-    max_length=feats_cfg["perplexity"]["max_length"],
+vocab = Vocab(
+    stoi={tok: i for i, tok in enumerate(vcfg["itos"])},
+    itos=vcfg["itos"],
+    pad_index=vcfg["pad_index"],
+    unk_index=vcfg["unk_index"],
 )
-featurizer = Featurizer(featurizer_cfg)
-MIN_WORDS = feats_cfg.get("min_words_operational", 30)
 
-try:
-    model = joblib.load(MODEL_PATH)
-    MODEL_LOADED = True
-except Exception:
-    model = None
-    MODEL_LOADED = False
+# Crear modelo y cargar pesos
+model = BiLSTMClassifier(
+    vocab_size=len(vocab.itos),
+    embed_dim=128,
+    hidden_dim=128,
+    pad_index=vocab.pad_index,
+).to(device)
+
+state_dict = torch.load(pathlib.Path(MODEL_DIR) / "model.pt", map_location=device)
+model.load_state_dict(state_dict)
+model.eval()
 
 
 @app.get("/health")
-def health() -> dict:
+def health():
     return {
         "status": "ok",
-        "model_loaded": MODEL_LOADED,
-        "min_words": MIN_WORDS,
+        "model_dir": MODEL_DIR,
         "threshold": THRESHOLD,
+        "min_words": MIN_WORDS,
     }
-
 
 @app.post("/predict")
 def predict():
@@ -62,32 +68,23 @@ def predict():
             }
         ), 200
 
-    if model is None:
-        return (
-            jsonify(
-                {
-                    "error": "modelo no entrenado. Ejecuta iatd.training.train_baseline primero."
-                }
-            ),
-            500,
-        )
+    # codificar texto
+    ids = vocab.encode(text)
+    import torch.nn.functional as F
+    import torch
 
-    X = featurizer.table([text])
+    input_ids = torch.tensor(ids, dtype=torch.long).unsqueeze(0).to(device)
+    lengths = torch.tensor([len(ids)], dtype=torch.long).to(device)
 
-    if hasattr(model, "predict_proba"):
-        score = float(model.predict_proba(X)[0, 1])
-    else:
-        from sklearn.preprocessing import MinMaxScaler
+    with torch.no_grad():
+        logits = model(input_ids, lengths)
+        prob = torch.sigmoid(logits).item()
 
-        scaler = MinMaxScaler()
-        scores = model.decision_function(X).reshape(-1, 1)
-        score = float(scaler.fit_transform(scores).ravel()[0])
-
-    decision = "IA" if score >= THRESHOLD else "humano"
+    decision = "IA" if prob >= THRESHOLD else "humano"
 
     return jsonify(
         {
-            "score": score,
+            "score": float(prob),
             "decision": decision,
             "threshold": THRESHOLD,
         }
@@ -95,4 +92,4 @@ def predict():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=True)
+    app.run(host="0.0.0.0", port=8001, debug=True)
