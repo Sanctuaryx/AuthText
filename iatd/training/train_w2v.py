@@ -6,13 +6,20 @@ from pathlib import Path
 import pandas as pd
 from gensim.models import Word2Vec
 
-from vocab import simple_tokenize  # o desde iatd.models.vocab si lo tienes en paquete
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from models.vocab import simple_tokenize  # o desde iatd.models.vocab si lo tienes en paquete
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--train_path", type=str, default="data/train.csv")
-    parser.add_argument("--out_path", type=str, default="artifacts/w2v.model")
+    parser.add_argument("--out_dir", type=str, default="artifacts/w2v.model")
     parser.add_argument("--vector_size", type=int, default=256)
     parser.add_argument("--window", type=int, default=5)
     parser.add_argument("--min_count", type=int, default=2)
@@ -39,7 +46,7 @@ def main() -> None:
         workers=args.workers,
     )
 
-    out_path = Path(args.out_path)
+    out_path = Path(args.out_dir)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     w2v.save(str(out_path))
 

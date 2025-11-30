@@ -13,13 +13,21 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import pandas as pd
+from gensim.models import Word2Vec
 
-from iatd.data.datasets import read_jsonl
-from iatd.logging import setup_logging
-from iatd.models.custom_bilstm import BiLSTMClassifier
-from iatd.models.dataset import TextDataset, TextExample, collate_batch
-from iatd.models.vocab import Vocab
-from iatd.utils.seed import set_seed
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+    
+from data.datasets import read_jsonl
+from utils.logging import setup_logging
+from models.custom_bilstm import BiLSTMClassifier
+from models.dataset import TextDataset, TextExample, collate_batch
+from models.vocab import Vocab
+from utils.seed import set_seed
 
 
 def load_examples(path: str) -> List[TextExample]:
@@ -133,10 +141,10 @@ def main() -> None:
     parser.add_argument("--min_freq", type=int, default=2)
     parser.add_argument("--max_len", type=int, default=256)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument(
-        "--out_dir", type=str, default="artifacts/custom_model"
-    )
+    parser.add_argument("--w2v_path", type=str, default=None, help="Ruta a un modelo Word2Vec de gensim para inicializar embeddings (opcional).")
+    parser.add_argument("--out_dir", type=str, default="models/bilstm_rand/custom_model")
     parser.add_argument("--patience", type=int, default=3)
+    
     args = parser.parse_args()
 
     setup_logging()
@@ -152,7 +160,28 @@ def main() -> None:
     # 2) Construir vocabulario (solo con train)
     train_texts = [ex.text for ex in train_examples]
     vocab = Vocab.build(train_texts, min_freq=args.min_freq)
+    
+    pretrained_tensor = None
+    embed_dim = args.embed_dim  # valor por defecto
 
+    if args.w2v_path is not None:
+        print(f"Cargando Word2Vec desde {args.w2v_path}...")
+        w2v = Word2Vec.load(args.w2v_path)
+        embed_dim = w2v.vector_size
+
+        # Matriz de embeddings: (vocab_size, embed_dim)
+        emb_matrix = np.random.normal(
+            scale=0.1, size=(len(vocab.itos), embed_dim)
+        ).astype(np.float32)
+
+        for idx, token in enumerate(vocab.itos):
+            if token in w2v.wv:
+                emb_matrix[idx] = w2v.wv[token]
+
+        pretrained_tensor = torch.from_numpy(emb_matrix)
+    else:
+        print("Sin Word2Vec: usando embeddings aleatorios.")
+    
     # 3) Crear datasets
     train_ds = TextDataset(train_examples, vocab=vocab, max_len=args.max_len)
     val_ds = TextDataset(val_examples, vocab=vocab, max_len=args.max_len)
@@ -173,11 +202,13 @@ def main() -> None:
     # 4) Crear modelo
     model = BiLSTMClassifier(
         vocab_size=len(vocab.itos),
-        embed_dim=args.embed_dim,
+        embed_dim=embed_dim,
         hidden_dim=args.hidden_dim,
         num_layers=args.num_layers,
         pad_index=vocab.pad_index,
         dropout=0.3,
+        pretrained_embeddings=pretrained_tensor,
+        freeze_embeddings=False,
     ).to(device)
 
     criterion = nn.BCEWithLogitsLoss()
