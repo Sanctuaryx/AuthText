@@ -1,24 +1,67 @@
 # Detector de Texto IA vs Humano (TFM)
 
-Proyecto para clasificación binaria **IA (1)** vs **Humano (0)** en textos en español usando:
+Sistema completo para **clasificar textos en español** como **IA (1)** vs **Humano (0)** y compararlos de forma homogénea, incluyendo **entrenamiento**, **evaluación** y **exposición vía API REST**.
 
-- **BiLSTM + Atención** (modelo entrenado desde cero)
-- **Word2Vec + BiLSTM** (embeddings estáticos entrenados en el corpus)
-- **BERT (embeddings) + MLP** (embeddings contextuales + clasificador ligero)
+Modelos incluidos:
 
-Incluye una **API REST** para inferencia con los 3 modelos.
+1. **BiLSTM (embeddings aleatorios)** — entrenado desde cero (baseline).
+2. **Word2Vec + BiLSTM** — embeddings estáticos entrenados en tu corpus + BiLSTM.
+3. **BERT fine-tuned** (dccuchile/bert-base-spanish-wwm-cased) — fine-tuning supervisado con *chunking/stride* y agregación por documento.
+
+---
+
+## Índice
+
+- [Estructura del repositorio](#estructura-del-repositorio)
+- [Requisitos](#requisitos)
+- [Datos](#datos)
+- [Entrenamiento](#entrenamiento)
+  - [1) BiLSTM baseline](#1-bilstm-baseline)
+  - [2) Word2Vec + BiLSTM](#2-word2vec--bilstm)
+  - [3) BERT fine-tuned](#3-bert-fine-tuned)
+- [Evaluación y comparación](#evaluación-y-comparación)
+- [API REST](#api-rest)
+- [Artefactos esperados](#artefactos-esperados)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Estructura del repositorio
+
+> Puede variar ligeramente según cómo lo tengas organizado, pero el flujo esperado es:
+
+```
+.
+├─ data/
+│  ├─ train.csv
+│  ├─ val.csv
+│  └─ test_es.csv
+├─ logic/
+│  ├─ models/
+│  ├─ training/
+│  │  ├─ train_bert.py
+│  │  ├─ train_w2v.py
+│  │  └─ (script de entrenamiento BiLSTM, p. ej. train.py o train_bilstm.py)
+│  └─ artifacts/
+│     ├─ bilstm_rand/
+│     ├─ bilstm_w2v/
+│     └─ bert/
+├─ tests/
+│  └─ eval_test.py
+├─ api.py
+├─ requirements.txt
+└─ README.md
+```
 
 ---
 
 ## Requisitos
 
-- Python 3.10+ recomendado
-- PyTorch (GPU opcional)
-- `transformers` + `safetensors` para BERT
-- `gensim` para Word2Vec
-- `flask` para la API
+- **Python 3.10+** recomendado (3.11/3.12 también funciona).
+- Entorno virtual (`venv`).
+- **PyTorch** con CUDA (opcional pero recomendado si tienes GPU).
 
-Instalación con Windows PowerShell:
+Instalación (Windows PowerShell):
 
 ```powershell
 python -m venv .venv
@@ -27,33 +70,49 @@ pip install -U pip
 pip install -r requirements.txt
 ```
 
+> **GPU**: si `torch.cuda.is_available()` te da `False`, normalmente es porque instalaste una build CPU.
+> Instala PyTorch CUDA desde la web oficial de PyTorch para tu versión de CUDA.
+
 ---
 
-## Datos (formato)
+## Datos
 
-Los CSV deben tener al menos estas columnas:
+Los CSV deben tener al menos:
 
 - `text` (string)
 - `generated` (0 = humano, 1 = IA)
 
-Ejemplos:
+Rutas típicas:
+
 - `data/train.csv`
 - `data/val.csv`
 - `data/test_es.csv`
 
 ---
 
-# Entrenamiento de los 3 modelos
+## Entrenamiento
 
-## 1) BiLSTM base (embeddings aleatorios) → `logic/artifacts/bilstm_rand`
+> **Importante**: ejecuta los comandos **desde la raíz del proyecto**.
 
-Entrenar:
+### 1) BiLSTM baseline
+
+Salida recomendada:
+
+- `logic/artifacts/bilstm_rand`
+
+Comando (si tu script está en raíz como `train.py`):
 
 ```powershell
-python train.py --train_path data/train.csv --val_path data/val.csv --out_dir logic/artifacts/bilstm_rand
+python -u train.py --train_path data/train.csv --val_path data/val.csv --out_dir logic/artifacts/bilstm_rand
 ```
 
-Artefactos generados:
+Si lo tienes dentro de `logic/training/`:
+
+```powershell
+python -u logic/training/train.py --train_path data/train.csv --val_path data/val.csv --out_dir logic/artifacts/bilstm_rand
+```
+
+Artefactos:
 
 ```
 logic/artifacts/bilstm_rand/
@@ -62,225 +121,144 @@ logic/artifacts/bilstm_rand/
   config.json
 ```
 
-Evaluar en test:
-
-```powershell
-python tests/eval_test.py --test_path data/test_es.csv --bilstm_rand_dir logic/artifacts/bilstm_rand
-```
-
 ---
 
-## 2) Word2Vec + BiLSTM → `logic/artifacts/bilstm_w2v`
+### 2) Word2Vec + BiLSTM
 
-### 2.1 Entrenar Word2Vec (embeddings) → `logic/artifacts/w2v.model`
+Salida recomendada:
 
-> Esto entrena **solo** Word2Vec (sin labels). **No es el clasificador.**  
-> Es necesario usar el script para entrenar el modelo usando los embeddings generados:
->
-> - `python logic/training/train_w2v.py`  
+- `logic/artifacts/bilstm_w2v`
 
-Comando:
+#### 2.1 Entrenar Word2Vec
 
 ```powershell
-python logic/training/train_w2v.py --train_path data/train.csv --out_path logic/artifacts/bilstm_w2v/embeddings
+python -u logic/training/train_w2v.py --train_path data/train.csv --out_dir logic/artifacts/bilstm_w2v/embeddings
 ```
 
-Genera:
+Esperado:
 
-- `logic/artifacts/bilstm_w2v/embeddings/bilstm_w2v.model`
-- `logic/artifacts/bilstm_w2v/embeddings/w2v.model.syn1neg.npy`
-- `logic/artifacts/bilstm_w2v/embeddings/w2v.model.wv.vectors.npy`
+```
+logic/artifacts/bilstm_w2v/embeddings/
+  bilstm_w2v.model
+  bilstm_w2v.model.syn1neg.npy
+  bilstm_w2v.model.wv.vectors.npy
+```
 
-### 2.2 Entrenar BiLSTM usando embeddings W2V
-
-> `train.py` debe aceptar `--w2v_path` y usarlo para inicializar la capa `nn.Embedding`.
+#### 2.2 Entrenar BiLSTM con Word2Vec
 
 ```powershell
-python train.py --train_path data/train.csv --val_path data/val.csv --w2v_path logic/artifacts/bilstm_w2v/embeddings/bilstm_w2v.model --out_dir logic/artifacts/bilstm_w2v
+python -u train.py `
+  --train_path data/train.csv `
+  --val_path data/val.csv `
+  --w2v_path logic/artifacts/bilstm_w2v/embeddings/bilstm_w2v.model `
+  --out_dir logic/artifacts/bilstm_w2v
 ```
 
-Artefactos generados:
+Artefactos:
 
 ```
 logic/artifacts/bilstm_w2v/
   model.pt
   vocab.json
   config.json
-```
-
-Evaluar en test:
-
-```powershell
-python tests/eval_test.py --test_path data/test_es.csv --bilstm_w2v_dir logic/artifacts/bilstm_w2v
+  embeddings/   (si lo conservas)
 ```
 
 ---
 
-## 3) BERT embeddings + MLP → `logic/artifacts/bert`
+### 3) BERT fine-tuned
 
-### 3.1 Generar embeddings BERT (train / val / test)
+Aquí **NO** hay `model.pt`. Se guarda en formato HuggingFace con **`model.safetensors`** + tokenizer + `config.json`.
 
-```powershell
-python src/bert_embeddings.py --input data/train.csv   --output data/bert/bert_train.npz
-python src/bert_embeddings.py --input data/val.csv     --output data/bert/bert_val.npz
-python src/bert_embeddings.py --input data/test_es.csv --output data/bert/bert_test.npz
-```
+Salida recomendada:
 
-Cada `.npz` contiene:
-- `X`: embeddings (N, 768)
-- `y`: etiquetas (N,)
+- `logic/artifacts/bert`
 
-> Nota: para evitar problemas de seguridad con `.bin` y torch < 2.6, el script debe cargar con `use_safetensors=True`.
-
-### 3.2 Entrenar el MLP sobre embeddings
+Comando típico:
 
 ```powershell
-python src/train_bert.py --train_npz data/bert/bert_train.npz --val_npz data/bert/bert_val.npz --test_npz data/bert/bert_test.npz --out_dir logic/artifacts/bert
+python -u logic/training/train_bert.py `
+  --train_csv data/train.csv `
+  --val_csv data/val.csv `
+  --test_csv data/test_es.csv `
+  --out_dir logic/artifacts/bert `
+  --max_length 384 `
+  --stride 128 `
+  --agg median `
+  --epochs 3 `
+  --batch_size 8 `
+  --grad_accum 2 `
+  --lr 2e-5
 ```
 
-Artefactos generados:
+Artefactos mínimos:
 
 ```
 logic/artifacts/bert/
-  model.pt
   config.json
-  test_metrics.json
-```
-
-Evaluación (opcional, también se puede hacer desde el comparador global):
-
-```powershell
-python tests/eval_test.py --bert_mlp_dir logic/artifacts/bert --bert_test_npz data/bert/bert_test.npz
+  model.safetensors
+  tokenizer_config.json / special_tokens_map.json / vocab.txt / tokenizer.json (según tokenizer)
+  test_metrics.json (si evalúas en test)
+  calibrator.joblib (si tu pipeline calibra; opcional)
 ```
 
 ---
 
-# Comparar los 3 modelos (mismo test)
+## Evaluación y comparación
 
 ```powershell
-python tests/eval_test.py `
+python -u tests/eval_test.py `
   --test_path data/test_es.csv `
   --bilstm_rand_dir logic/artifacts/bilstm_rand `
   --bilstm_w2v_dir logic/artifacts/bilstm_w2v `
-  --bert_mlp_dir logic/artifacts/bert `
-  --bert_test_npz data/bert/bert_test.npz
+  --bert_dir logic/artifacts/bert
 ```
 
-Esto imprime una tabla comparativa y guarda:
-
-```
-metrics/all_models_metrics.json
-```
+Genera:
+- `logic/artifacts/<modelo>/test_metrics.json`
+- `metrics/all_models_metrics.json`
 
 ---
 
-# API REST (Flask)
+## API REST
 
-La API permite inferencia con:
-- `bilstm_rand`
-- `bilstm_w2v`
-- `bert`
-
-## 1) Arrancar la API
+Arranque:
 
 ```powershell
-python api.py
+python -u api.py
 ```
 
-Por defecto escucha en:
+Endpoints:
+- `GET /health`
+- `GET /models`
+- `POST /predict` (body: `{ "text": "...", "model": "bert|bilstm_rand|bilstm_w2v" }`)
+- `POST /predict/<model_name>`
 
-- `http://localhost:8001`
-
-## 2) Ver estado y modelos cargados
-
-```powershell
-Invoke-RestMethod -Uri "http://localhost:8001/health" -Method GET
-```
-
-Lista de modelos disponibles:
-
-```powershell
-Invoke-RestMethod -Uri "http://localhost:8001/models" -Method GET
-```
-
-## 3) Petición de predicción (PowerShell)
-
-> Nota: para evitar problemas de codificación con `ñ`, se envía el body como bytes UTF-8.
-
-### a) BiLSTM rand
-
-```powershell
-$payload = @{ text="Texto largo en español para evaluar..." ; model="bilstm_rand" } | ConvertTo-Json
-Invoke-RestMethod -Uri "http://localhost:8001/predict" -Method POST -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($payload))
-```
-
-### b) BiLSTM + Word2Vec
-
-```powershell
-$payload = @{ text="Texto largo en español para evaluar..." ; model="bilstm_w2v" } | ConvertTo-Json
-Invoke-RestMethod -Uri "http://localhost:8001/predict" -Method POST -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($payload))
-```
-
-### c) BERT + MLP
+PowerShell (UTF-8):
 
 ```powershell
 $payload = @{ text="Texto largo en español para evaluar..." ; model="bert" } | ConvertTo-Json
 Invoke-RestMethod -Uri "http://localhost:8001/predict" -Method POST -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($payload))
 ```
 
-## 4) Petición con curl (Linux/macOS)
+curl:
 
 ```bash
 curl -X POST http://localhost:8001/predict   -H "Content-Type: application/json"   -d '{"text":"Texto largo en español para evaluar...","model":"bert"}'
 ```
 
-## 5) Respuesta esperada (ejemplo)
+---
 
-```json
-{
-  "model": "bilstm_rand",
-  "score": 0.73,
-  "decision": "IA",
-  "threshold": 0.30,
-  "confidence": "high",
-  "text_length": 120,
-  "min_words": 30
-}
-```
+## Artefactos esperados
+
+- **BiLSTM**: `model.pt`, `vocab.json`, `config.json`
+- **BERT fine-tuned**: `model.safetensors` + tokenizer files + `config.json`
 
 ---
 
-## Variables de entorno útiles (opcional)
+## Troubleshooting
 
-Puedes cambiar rutas y modelo por defecto sin tocar código:
-
-```powershell
-$env:BILSTM_RAND_DIR="logic/artifacts/bilstm_rand"
-$env:BILSTM_W2V_DIR="logic/artifacts/bilstm_w2v"
-$env:BERT_DIR="logic/artifacts/bert"
-$env:BERT_BASE_MODEL="dccuchile/bert-base-spanish-wwm-cased"
-$env:DEFAULT_MODEL="bilstm_rand"
-python api.py
-```
-
----
-
-## Checklist de artefactos (para que la API cargue)
-
-Antes de arrancar la API, deben existir:
-
-**BiLSTM rand**
-- `logic/artifacts/bilstm_rand/model.pt`
-- `logic/artifacts/bilstm_rand/vocab.json`
-- `logic/artifacts/bilstm_rand/config.json`
-
-**BiLSTM + W2V**
-- `logic/artifacts/bilstm_w2v/model.pt`
-- `logic/artifacts/bilstm_w2v/vocab.json`
-- `logic/artifacts/bilstm_w2v/config.json`
-
-**BERT + MLP**
-- `logic/artifacts/bert/model.pt`
-- `logic/artifacts/bert/config.json`
-
-> Para BERT+MLP, la API calcula embeddings al vuelo usando el modelo base definido por `BERT_BASE_MODEL`.
+- `ModuleNotFoundError: logic`: ejecuta desde la raíz y/o exporta `PYTHONPATH`.
+- PowerShell + acentos: envía el body como bytes UTF-8.
+- `PermissionError`: evita rutas con OneDrive bloqueando y comprueba permisos.
+- GPU no detectada: instala PyTorch CUDA.

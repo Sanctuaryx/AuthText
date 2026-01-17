@@ -8,16 +8,17 @@ from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
-import torch.nn as nn
+import joblib
 from flask import Flask, jsonify, request
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 import sys
 from pathlib import Path
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-    
+
 from models.custom_bilstm import BiLSTMClassifier
 from models.vocab import Vocab
 
@@ -28,9 +29,7 @@ app = Flask(__name__)
 # =========================
 BILSTM_RAND_DIR = os.getenv("BILSTM_RAND_DIR", "logic/artifacts/bilstm_rand")
 BILSTM_W2V_DIR = os.getenv("BILSTM_W2V_DIR", "logic/artifacts/bilstm_w2v")
-
-BERT_DIR = os.getenv("BERT_DIR", "logic/artifacts/bert") 
-BERT_BASE_MODEL = os.getenv("BERT_BASE_MODEL", "dccuchile/bert-base-spanish-wwm-cased")
+BERT_DIR = os.getenv("BERT_DIR", "logic/artifacts/bert")
 
 MIN_WORDS = int(os.getenv("MIN_WORDS", "30"))
 CONF_BAND = float(os.getenv("CONF_BAND", "0.05"))
@@ -65,10 +64,6 @@ def load_vocab_and_config(model_dir: str) -> Tuple[Vocab, dict]:
 
 
 def safe_vocab_encode(vocab: Vocab, text: str) -> list[int]:
-    """
-    Tu API antigua usa VOCAB.encode(text). En el Vocab que te di,
-    el método se llama encode_text(). Esto permite ambas.
-    """
     if hasattr(vocab, "encode"):
         return vocab.encode(text)  # type: ignore[attr-defined]
     return vocab.encode_text(text)  # type: ignore[attr-defined]
@@ -87,34 +82,20 @@ class BiLSTMBundle:
     error: Optional[str] = None
 
 
-class MLPClassifier(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int = 256, dropout: float = 0.3) -> None:
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, 1),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x).squeeze(1)
-
-
 @dataclass
 class BERTBundle:
     name: str = "bert"
     model_dir: str = BERT_DIR
-    base_model: str = BERT_BASE_MODEL
 
     tokenizer: Optional[Any] = None
-    bert: Optional[Any] = None  # transformers model
-    mlp: Optional[MLPClassifier] = None
+    model: Optional[Any] = None  # AutoModelForSequenceClassification
+    calibrator: Optional[Any] = None
 
     cfg: Optional[dict] = None
     threshold: float = 0.5
-    input_dim: int = 768
-    hidden_dim: int = 256
+    max_length: int = 384
+    stride: int = 128
+    agg: str = "median"
 
     loaded: bool = False
     error: Optional[str] = None
@@ -150,28 +131,29 @@ def load_bilstm_bundle(name: str, model_dir: str) -> BiLSTMBundle:
     return b
 
 
-def load_bert_bundle(model_dir: str, base_model: str) -> BERTBundle:
-    b = BERTBundle(model_dir=model_dir, base_model=base_model)
+def load_bert_bundle(model_dir: str) -> BERTBundle:
+    b = BERTBundle(model_dir=model_dir)
     try:
-        model_dir_path = pathlib.Path(model_dir)
-        with (model_dir_path / "config.json").open("r", encoding="utf-8") as f:
-            cfg = json.load(f)
+        p = pathlib.Path(model_dir)
 
+        b.tokenizer = AutoTokenizer.from_pretrained(p, use_fast=True)
+        b.model = AutoModelForSequenceClassification.from_pretrained(p).to(device)
+        b.model.eval()
+
+        cfg_path = p / "config.json"
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
         b.cfg = cfg
-        b.threshold = float(cfg.get("threshold", 0.5))
-        b.input_dim = int(cfg.get("input_dim", 768))
-        b.hidden_dim = int(cfg.get("hidden_dim", 256))
 
-        # Load tokenizer + BERT base (para embeddings)
-        b.tokenizer = AutoTokenizer.from_pretrained(base_model)
-        b.bert = AutoModel.from_pretrained(base_model, use_safetensors=True).to(device)
-        b.bert.eval()
+        rt = cfg.get("detector_runtime", {}) if isinstance(cfg, dict) else {}
+        if isinstance(rt, dict):
+            b.threshold = float(rt.get("chosen_threshold", 0.5))
+            b.max_length = int(rt.get("max_length", b.max_length))
+            b.stride = int(rt.get("stride", b.stride))
+            b.agg = str(rt.get("aggregation", b.agg))
 
-        # Load MLP trained on embeddings
-        b.mlp = MLPClassifier(input_dim=b.input_dim, hidden_dim=b.hidden_dim, dropout=0.3).to(device)
-        state_dict = torch.load(model_dir_path / "model.pt", map_location=device)
-        b.mlp.load_state_dict(state_dict)
-        b.mlp.eval()
+        calib_path = p / "calibrator.joblib"
+        if calib_path.exists():
+            b.calibrator = joblib.load(calib_path)
 
         b.loaded = True
     except Exception as e:
@@ -185,7 +167,7 @@ def load_bert_bundle(model_dir: str, base_model: str) -> BERTBundle:
 # =========================
 BILSTM_RAND = load_bilstm_bundle("bilstm_rand", BILSTM_RAND_DIR)
 BILSTM_W2V = load_bilstm_bundle("bilstm_w2v", BILSTM_W2V_DIR)
-BERT = load_bert_bundle(BERT_DIR, BERT_BASE_MODEL)
+BERT = load_bert_bundle(BERT_DIR)
 
 MODEL_REGISTRY: Dict[str, Any] = {
     "bilstm_rand": BILSTM_RAND,
@@ -208,7 +190,6 @@ def predict_bilstm(bundle: BiLSTMBundle, text: str) -> Dict[str, Any]:
     if len(ids) == 0:
         ids = [bundle.vocab.unk_index]
 
-    # truncar a max_len
     if bundle.max_len and len(ids) > bundle.max_len:
         ids = ids[: bundle.max_len]
 
@@ -230,42 +211,59 @@ def predict_bilstm(bundle: BiLSTMBundle, text: str) -> Dict[str, Any]:
     }
 
 
-def bert_embed_meanpool(bundle: BERTBundle, text: str, max_length: int = 256) -> np.ndarray:
-    assert bundle.tokenizer is not None and bundle.bert is not None
+def predict_bert(bundle: BERTBundle, text: str) -> Dict[str, Any]:
+    assert bundle.tokenizer is not None and bundle.model is not None
+
     enc = bundle.tokenizer(
-        [text],
-        padding=True,
+        text,
         truncation=True,
-        max_length=max_length,
+        padding="max_length",
+        max_length=bundle.max_length,
+        return_overflowing_tokens=True,
+        stride=bundle.stride,
         return_tensors="pt",
     )
-    enc = {k: v.to(device) for k, v in enc.items()}
-    with torch.no_grad():
-        out = bundle.bert(**enc)
-        hidden = out.last_hidden_state  # (1, L, H)
-        mask = enc["attention_mask"].unsqueeze(-1)  # (1, L, 1)
-        vec = (hidden * mask).sum(dim=1) / mask.sum(dim=1)  # (1, H)
-    return vec.detach().cpu().numpy()[0]
 
-
-def predict_bert(bundle: BERTBundle, text: str) -> Dict[str, Any]:
-    assert bundle.mlp is not None
-
-    x = bert_embed_meanpool(bundle, text, max_length=256)
-    x_t = torch.from_numpy(x).float().unsqueeze(0).to(device)
+    input_ids = enc["input_ids"].to(device)
+    attention_mask = enc["attention_mask"].to(device)
+    token_type_ids = enc.get("token_type_ids", None)
+    if token_type_ids is not None:
+        token_type_ids = token_type_ids.to(device)
 
     with torch.no_grad():
-        logits = bundle.mlp(x_t)
-        prob = torch.sigmoid(logits).item()
+        if token_type_ids is not None:
+            out = bundle.model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        else:
+            out = bundle.model(input_ids=input_ids, attention_mask=attention_mask)
 
-    decision = "IA" if prob >= bundle.threshold else "humano"
+        probs_win = torch.softmax(out.logits, dim=-1)[:, 1].detach().cpu().numpy()
+
+    # agregación por documento
+    if bundle.agg == "mean":
+        prob_doc = float(probs_win.mean())
+    elif bundle.agg == "max":
+        prob_doc = float(probs_win.max())
+    else:
+        prob_doc = float(np.median(probs_win))
+
+    # calibración a nivel documento (si existe)
+    prob_used = prob_doc
+    if bundle.calibrator is not None:
+        prob_used = float(bundle.calibrator.predict_proba(np.array([[prob_doc]], dtype=np.float32))[:, 1][0])
+
+    decision = "IA" if prob_used >= bundle.threshold else "humano"
     return {
         "model": bundle.name,
-        "score": float(prob),
+        "score": float(prob_used),
         "decision": decision,
         "threshold": float(bundle.threshold),
-        "confidence": confidence_label(prob, bundle.threshold),
+        "confidence": confidence_label(prob_used, bundle.threshold),
         "confidence_band": float(CONF_BAND),
+        "bert_windows": int(len(probs_win)),
+        "aggregation": bundle.agg,
+        "max_length": int(bundle.max_length),
+        "stride": int(bundle.stride),
+        "calibrated": bool(bundle.calibrator is not None),
     }
 
 
@@ -339,7 +337,6 @@ def predict():
 def predict_named(model_name: str):
     data = request.get_json(force=True) or {}
     data["model"] = model_name
-    # reutiliza /predict
     request.args = request.args.copy()
     return predict()
 

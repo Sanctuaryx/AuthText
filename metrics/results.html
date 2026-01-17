@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Informe comparativo — Detectores IA vs Humano</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#121a33;
+      --panel2:#0f1730;
+      --text:#e9ecf1;
+      --muted:#aab3c5;
+      --line:#22305a;
+      --good:#34d399;
+      --warn:#fbbf24;
+      --bad:#fb7185;
+      --accent:#60a5fa;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      --radius:14px;
+    }
+    html,body{height:100%;}
+    body{
+      margin:0; background:radial-gradient(1200px 700px at 10% 10%, #1b2a66 0%, var(--bg) 55%) fixed;
+      color:var(--text); font-family:var(--sans); line-height:1.35;
+    }
+    .wrap{max-width:1200px; margin:0 auto; padding:28px 18px 40px;}
+    header{display:flex; gap:14px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap;}
+    h1{font-size:22px; margin:0 0 6px;}
+    .sub{color:var(--muted); margin:0;}
+    .pill{
+      background:linear-gradient(180deg, rgba(96,165,250,.15), rgba(96,165,250,.08));
+      border:1px solid rgba(96,165,250,.25);
+      color:var(--text);
+      padding:8px 10px; border-radius:999px; font-size:12px;
+      display:inline-flex; gap:8px; align-items:center;
+    }
+    .grid{display:grid; gap:14px; margin-top:16px;}
+    @media(min-width:920px){ .grid{grid-template-columns: 1.2fr .8fr;} }
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:var(--radius);
+      box-shadow:0 16px 50px rgba(0,0,0,.35);
+      overflow:hidden;
+    }
+    .card .hd{
+      padding:14px 14px 10px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;
+      background:rgba(0,0,0,.12);
+    }
+    .card .bd{padding:14px;}
+    .kpis{display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:10px;}
+    @media(max-width:920px){ .kpis{grid-template-columns:repeat(3, minmax(0,1fr));} }
+    @media(max-width:540px){ .kpis{grid-template-columns:repeat(2, minmax(0,1fr));} }
+    .kpi{
+      background:rgba(0,0,0,.18);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      padding:10px 10px 9px;
+    }
+    .kpi .lbl{font-size:11px; color:var(--muted);}
+    .kpi .val{font-size:16px; font-weight:700; margin-top:4px;}
+    .kpi .hint{font-size:11px; color:var(--muted); margin-top:3px;}
+    table{width:100%; border-collapse:collapse; font-size:13px;}
+    th,td{padding:9px 10px; border-bottom:1px solid rgba(255,255,255,.08); vertical-align:top;}
+    th{color:var(--muted); font-weight:600; text-align:left; background:rgba(0,0,0,.12);}
+    tr:hover td{background:rgba(0,0,0,.10);}
+    .tag{
+      display:inline-flex; align-items:center; gap:6px;
+      padding:5px 9px; border-radius:999px; font-size:12px;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.12);
+    }
+    .dot{width:8px;height:8px;border-radius:50%;}
+    .dot.good{background:var(--good);}
+    .dot.warn{background:var(--warn);}
+    .dot.bad{background:var(--bad);}
+    .mono{font-family:var(--mono);}
+    .muted{color:var(--muted);}
+    .row{display:flex; gap:14px; flex-wrap:wrap;}
+    .cols{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+    @media(max-width:920px){ .cols{grid-template-columns:1fr;} }
+    .cm{
+      width:100%; border-radius:12px; overflow:hidden;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(0,0,0,.14);
+    }
+    .cm table{font-size:13px;}
+    .cm th{background:rgba(0,0,0,.20);}
+    .cm .cell{
+      text-align:center; font-weight:700;
+    }
+    .cm .small{font-weight:500; font-size:11px; color:var(--muted);}
+    pre{
+      margin:0;
+      white-space:pre-wrap;
+      word-break:break-word;
+      background:rgba(0,0,0,.18);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      padding:12px;
+      font-size:12px;
+      line-height:1.35;
+      font-family:var(--mono);
+      color:#dbe2f5;
+    }
+    .bars{display:grid; gap:8px; margin-top:8px;}
+    .bar{
+      display:grid; grid-template-columns: 120px 1fr 62px; gap:10px; align-items:center;
+    }
+    .bar .name{font-size:12px; color:var(--muted);}
+    .track{
+      height:10px; background:rgba(255,255,255,.08);
+      border-radius:999px; overflow:hidden; border:1px solid rgba(255,255,255,.10);
+    }
+    .fill{height:100%; width:0%; background:linear-gradient(90deg, rgba(96,165,250,.95), rgba(52,211,153,.95));}
+    .bar .val{font-size:12px; text-align:right; color:var(--text); font-variant-numeric:tabular-nums;}
+    footer{margin-top:18px; color:var(--muted); font-size:12px;}
+    .btns{display:flex; gap:10px; flex-wrap:wrap;}
+    button{
+      background:rgba(0,0,0,.18);
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:10px;
+      cursor:pointer;
+      font-size:12px;
+    }
+    button:hover{border-color:rgba(96,165,250,.45);}
+    .active{border-color:rgba(96,165,250,.65) !important; box-shadow:0 0 0 3px rgba(96,165,250,.12);}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Informe comparativo — Modelos IA vs Humano</h1>
+        <p class="sub">Resumen de métricas en test + detalle por modelo (matriz de confusión y classification report).</p>
+      </div>
+      <div class="pill">
+        <span class="dot good"></span>
+        <span><b>Fuente:</b> all_models_metrics.json</span>
+        <span class="muted mono" id="meta"></span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div class="hd">
+          <div>
+            <div style="font-weight:700;">Comparativa (TEST)</div>
+            <div class="muted" style="font-size:12px;">Acc, F1, Prec, Rec, ROC-AUC, Umbral y métricas derivadas (FPR/TNR).</div>
+          </div>
+          <div class="btns" id="sortBtns"></div>
+        </div>
+        <div class="bd">
+          <table id="cmpTable">
+            <thead>
+              <tr>
+                <th>Modelo</th>
+                <th>Acc</th>
+                <th>F1</th>
+                <th>Prec</th>
+                <th>Rec</th>
+                <th>ROC-AUC</th>
+                <th>Thr</th>
+                <th>FPR</th>
+                <th>TNR</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+
+          <div style="margin-top:14px;">
+            <div class="muted" style="font-size:12px; margin-bottom:8px;">Barras (comparación rápida)</div>
+            <div class="bars" id="bars"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <div class="hd">
+          <div>
+            <div style="font-weight:700;">Detalle del modelo</div>
+            <div class="muted" style="font-size:12px;">Selecciona un modelo para ver sus métricas completas.</div>
+          </div>
+          <span class="tag" id="selectedTag"><span class="dot warn"></span><span>—</span></span>
+        </div>
+        <div class="bd">
+          <div class="kpis" id="kpis"></div>
+          <div class="cols" style="margin-top:14px;">
+            <div class="cm" id="cmBox"></div>
+            <div>
+              <div class="muted" style="font-size:12px; margin:0 0 8px;">Classification report</div>
+              <pre id="report"></pre>
+            </div>
+          </div>
+          <div style="margin-top:14px;">
+            <div class="muted" style="font-size:12px; margin:0 0 8px;">Runtime (si aplica)</div>
+            <pre id="runtime"></pre>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <footer>
+      <div>Notas:</div>
+      <ul>
+        <li><span class="mono">FPR</span> = FP/(FP+TN) (falsos positivos sobre humanos). <span class="mono">TNR</span> = 1 - FPR.</li>
+        <li>Si BERT tiene AUC alto pero FPR alto, suele indicar problema de umbral/calibración o sesgo del score.</li>
+      </ul>
+    </footer>
+  </div>
+
+  <script>
+    // === Datos embebidos desde tu all_models_metrics.json ===
+    const DATA = {
+      "bilstm_rand": {
+        "num_examples": 9037,
+        "threshold_used": 0.30000000000000004,
+        "accuracy": 0.7022241894433994,
+        "f1": 0.7305497146290177,
+        "precision": 0.7012687427912342,
+        "recall": 0.7623824451410658,
+        "roc_auc": 0.7681589142143201,
+        "confusion_matrix": [[2698,1554],[1137,3648]],
+        "classification_report": "              precision    recall  f1-score   support\n\n         0.0      0.704     0.635     0.667      4252\n         1.0      0.701     0.762     0.731      4785\n\n    accuracy                          0.702      9037\n   macro avg      0.702     0.698     0.699      9037\nweighted avg      0.702     0.702     0.701      9037\n"
+      },
+      "bilstm_w2v": {
+        "num_examples": 9037,
+        "threshold_used": 0.15000000000000002,
+        "accuracy": 0.7012282837224743,
+        "f1": 0.7442697480583443,
+        "precision": 0.6805820197470985,
+        "recall": 0.8211076280041797,
+        "roc_auc": 0.7716063790989992,
+        "confusion_matrix": [[2408,1844],[856,3929]],
+        "classification_report": "              precision    recall  f1-score   support\n\n         0.0      0.738     0.566     0.641      4252\n         1.0      0.681     0.821     0.744      4785\n\n    accuracy                          0.701      9037\n   macro avg      0.709     0.694     0.693      9037\nweighted avg      0.707     0.701     0.696      9037\n"
+      },
+      "bert": {
+        "num_examples": 9037,
+        "threshold_used": 0.967,
+        "accuracy": 0.7677326546420272,
+        "f1": 0.7768682895715956,
+        "precision": 0.7905668541756815,
+        "recall": 0.7636363636363637,
+        "roc_auc": 0.8365523974949154,
+        "confusion_matrix": [[3284,968],[1131,3654]],
+        "classification_report": "              precision    recall  f1-score   support\n\n           0      0.744     0.772     0.758      4252\n           1      0.791     0.764     0.777      4785\n\n    accuracy                          0.768      9037\n   macro avg      0.767     0.768     0.767      9037\nweighted avg      0.769     0.768     0.768      9037\n",
+        "runtime": {"aggregation":"median","max_length":384,"stride":128,"calibrator_used":true}
+      }
+    };
+
+    // === Utilidades ===
+    const fmt = (x, d=4) => (typeof x === "number" ? x.toFixed(d) : String(x));
+    const pct = (x, d=1) => (typeof x === "number" ? (x*100).toFixed(d) + "%" : String(x));
+    function derived(cm){
+      const TN = cm[0][0], FP = cm[0][1], FN = cm[1][0], TP = cm[1][1];
+      const fpr = FP / Math.max(1, (FP + TN));
+      const tnr = 1 - fpr;
+      const fnr = FN / Math.max(1, (FN + TP));
+      const tpr = 1 - fnr;
+      return {TN,FP,FN,TP,fpr,tnr,fnr,tpr};
+    }
+    function qualTag(acc){
+      if(acc >= 0.78) return ["good","Alta"];
+      if(acc >= 0.70) return ["warn","Media"];
+      return ["bad","Baja"];
+    }
+
+    // === Render comparativa ===
+    const tbody = document.querySelector("#cmpTable tbody");
+    const bars = document.querySelector("#bars");
+    const sortBtns = document.querySelector("#sortBtns");
+
+    const SORT_KEYS = [
+      ["accuracy","Acc"],
+      ["f1","F1"],
+      ["precision","Prec"],
+      ["recall","Rec"],
+      ["roc_auc","ROC-AUC"],
+      ["threshold_used","Thr"],
+    ];
+    let sortKey = "accuracy";
+
+    function modelRows(){
+      return Object.entries(DATA).map(([name,m])=>{
+        const d = derived(m.confusion_matrix);
+        return {name, ...m, ...d};
+      });
+    }
+
+    function renderTable(){
+      const rows = modelRows().sort((a,b)=> (b[sortKey] ?? 0) - (a[sortKey] ?? 0));
+      tbody.innerHTML = "";
+      for(const r of rows){
+        const [dotClass,label] = qualTag(r.accuracy);
+        const tr = document.createElement("tr");
+        tr.style.cursor = "pointer";
+        tr.innerHTML = `
+          <td>
+            <span class="tag">
+              <span class="dot ${dotClass}"></span>
+              <span class="mono">${r.name}</span>
+            </span>
+          </td>
+          <td class="mono">${fmt(r.accuracy)}</td>
+          <td class="mono">${fmt(r.f1)}</td>
+          <td class="mono">${fmt(r.precision)}</td>
+          <td class="mono">${fmt(r.recall)}</td>
+          <td class="mono">${fmt(r.roc_auc)}</td>
+          <td class="mono">${fmt(r.threshold_used,3)}</td>
+          <td class="mono">${fmt(r.fpr,3)}</td>
+          <td class="mono">${fmt(r.tnr,3)}</td>
+        `;
+        tr.addEventListener("click", ()=> selectModel(r.name));
+        tbody.appendChild(tr);
+      }
+      renderBars(rows);
+    }
+
+    function renderBars(rows){
+      // barras por accuracy (principal) + f1
+      bars.innerHTML = "";
+      const metrics = [
+        ["accuracy","Accuracy"],
+        ["f1","F1"],
+        ["precision","Precision"],
+        ["recall","Recall"],
+        ["roc_auc","ROC-AUC"]
+      ];
+      // Mostrar 2 métricas por defecto para no recargar
+      const show = [["accuracy","Accuracy"],["f1","F1"],["roc_auc","ROC-AUC"]];
+      for(const [k, label] of show){
+        const box = document.createElement("div");
+        box.className = "card";
+        box.style.borderRadius = "12px";
+        box.style.border = "1px solid rgba(255,255,255,.08)";
+        box.style.background = "rgba(0,0,0,.10)";
+        box.innerHTML = `
+          <div class="hd" style="padding:10px 12px;">
+            <div style="font-weight:700;">${label}</div>
+            <div class="muted" style="font-size:12px;">Ordenado por ${label}</div>
+          </div>
+          <div class="bd" style="padding:10px 12px;"></div>
+        `;
+        const bd = box.querySelector(".bd");
+        const rs = [...rows].sort((a,b)=> (b[k] ?? 0) - (a[k] ?? 0));
+        rs.forEach(r=>{
+          const row = document.createElement("div");
+          row.className = "bar";
+          row.innerHTML = `
+            <div class="name mono">${r.name}</div>
+            <div class="track"><div class="fill" style="width:${Math.max(0,Math.min(1,r[k]))*100}%"></div></div>
+            <div class="val mono">${fmt(r[k],4)}</div>
+          `;
+          bd.appendChild(row);
+        });
+        bars.appendChild(box);
+      }
+    }
+
+    function renderSortButtons(){
+      sortBtns.innerHTML = "";
+      for(const [k,label] of SORT_KEYS){
+        const b = document.createElement("button");
+        b.textContent = `Ordenar por ${label}`;
+        if(k === sortKey) b.classList.add("active");
+        b.addEventListener("click", ()=>{
+          sortKey = k;
+          renderSortButtons();
+          renderTable();
+        });
+        sortBtns.appendChild(b);
+      }
+    }
+
+    // === Render detalle ===
+    const selectedTag = document.querySelector("#selectedTag");
+    const kpis = document.querySelector("#kpis");
+    const cmBox = document.querySelector("#cmBox");
+    const report = document.querySelector("#report");
+    const runtime = document.querySelector("#runtime");
+
+    function selectModel(name){
+      const m = DATA[name];
+      if(!m) return;
+      const d = derived(m.confusion_matrix);
+
+      const [dotClass,qual] = qualTag(m.accuracy);
+      selectedTag.innerHTML = `<span class="dot ${dotClass}"></span><span class="mono">${name}</span><span class="muted">(${qual})</span>`;
+
+      kpis.innerHTML = "";
+      const items = [
+        ["Accuracy", fmt(m.accuracy), "Global"],
+        ["F1", fmt(m.f1), "Balance Prec/Rec"],
+        ["Precision", fmt(m.precision), "Control FP"],
+        ["Recall", fmt(m.recall), "Detecta IA"],
+        ["ROC-AUC", fmt(m.roc_auc), "Separación"],
+        ["Threshold", fmt(m.threshold_used,3), "Decisión"],
+        ["FPR", fmt(d.fpr,3), "FP en humanos"],
+        ["TNR", fmt(d.tnr,3), "Especificidad"],
+        ["TN", d.TN, "Humano correcto"],
+        ["FP", d.FP, "Humano→IA"],
+        ["FN", d.FN, "IA→Humano"],
+        ["TP", d.TP, "IA correcto"],
+      ];
+      for(const [lbl,val,hint] of items){
+        const el = document.createElement("div");
+        el.className = "kpi";
+        el.innerHTML = `<div class="lbl">${lbl}</div><div class="val mono">${val}</div><div class="hint">${hint}</div>`;
+        kpis.appendChild(el);
+      }
+
+      cmBox.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th colspan="3">Matriz de confusión</th>
+            </tr>
+            <tr>
+              <th></th>
+              <th>Pred: Humano</th>
+              <th>Pred: IA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>Real: Humano</th>
+              <td class="cell">
+                ${d.TN}<div class="small">TN</div>
+              </td>
+              <td class="cell">
+                ${d.FP}<div class="small">FP</div>
+              </td>
+            </tr>
+            <tr>
+              <th>Real: IA</th>
+              <td class="cell">
+                ${d.FN}<div class="small">FN</div>
+              </td>
+              <td class="cell">
+                ${d.TP}<div class="small">TP</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+
+      report.textContent = m.classification_report || "";
+      runtime.textContent = JSON.stringify(m.runtime || {}, null, 2);
+    }
+
+    // === Meta ===
+    document.querySelector("#meta").textContent = `n=${Object.values(DATA)[0]?.num_examples ?? "?"} (test)`;
+
+    // init
+    renderSortButtons();
+    renderTable();
+    // Selección por defecto: el mejor por accuracy
+    const best = modelRows().sort((a,b)=> b.accuracy - a.accuracy)[0]?.name;
+    selectModel(best || Object.keys(DATA)[0]);
+  </script>
+</body>
+</html>
