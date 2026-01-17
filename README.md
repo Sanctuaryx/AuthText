@@ -5,7 +5,7 @@ Sistema completo para **clasificar textos en español** como **IA (1)** vs **Hum
 Modelos incluidos:
 
 1. **BiLSTM (embeddings aleatorios)** — entrenado desde cero (baseline).
-2. **Word2Vec + BiLSTM** — embeddings estáticos entrenados en tu corpus + BiLSTM.
+2. **Word2Vec + BiLSTM** — embeddings estáticos entrenados en un corpus + BiLSTM.
 3. **BERT fine-tuned** (dccuchile/bert-base-spanish-wwm-cased) — fine-tuning supervisado con *chunking/stride* y agregación por documento.
 
 ---
@@ -28,26 +28,17 @@ Modelos incluidos:
 
 ## Estructura del repositorio
 
-> Puede variar ligeramente según cómo lo tengas organizado, pero el flujo esperado es:
-
 ```
 .
 ├─ data/
-│  ├─ train.csv
-│  ├─ val.csv
-│  └─ test_es.csv
 ├─ logic/
 │  ├─ models/
 │  ├─ training/
-│  │  ├─ train_bert.py
-│  │  ├─ train_w2v.py
-│  │  └─ (script de entrenamiento BiLSTM, p. ej. train.py o train_bilstm.py)
 │  └─ artifacts/
 │     ├─ bilstm_rand/
 │     ├─ bilstm_w2v/
 │     └─ bert/
 ├─ tests/
-│  └─ eval_test.py
 ├─ api.py
 ├─ requirements.txt
 └─ README.md
@@ -100,13 +91,7 @@ Salida recomendada:
 
 - `logic/artifacts/bilstm_rand`
 
-Comando (si tu script está en raíz como `train.py`):
-
-```powershell
-python -u train.py --train_path data/train.csv --val_path data/val.csv --out_dir logic/artifacts/bilstm_rand
-```
-
-Si lo tienes dentro de `logic/training/`:
+desde de `logic/training/`:
 
 ```powershell
 python -u logic/training/train.py --train_path data/train.csv --val_path data/val.csv --out_dir logic/artifacts/bilstm_rand
