@@ -1,10 +1,11 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Informe comparativo — Detectores IA vs Humano</title>
-  <style>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>Informe comparativo — Detectores IA vs Humano</title>
+<style>
     :root{
       --bg:#0b1020;
       --panel:#121a33;
@@ -81,7 +82,7 @@
     .mono{font-family:var(--mono);}
     .muted{color:var(--muted);}
     .row{display:flex; gap:14px; flex-wrap:wrap;}
-    .cols{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+    .cols{display:grid; grid-template-columns:1fr; gap:14px;}
     @media(max-width:920px){ .cols{grid-template-columns:1fr;} }
     .cm{
       width:100%; border-radius:12px; overflow:hidden;
@@ -96,17 +97,51 @@
     .cm .small{font-weight:500; font-size:11px; color:var(--muted);}
     pre{
       margin:0;
-      white-space:pre-wrap;
-      word-break:break-word;
+      white-space:pre;
+      overflow-x:auto;
+      overflow-y:hidden;
       background:rgba(0,0,0,.18);
       border:1px solid rgba(255,255,255,.08);
       border-radius:12px;
       padding:12px;
       font-size:12px;
-      line-height:1.35;
+      line-height:1.45;
       font-family:var(--mono);
+      font-variant-numeric:tabular-nums;
       color:#dbe2f5;
     }
+    .details{
+      margin-top:10px;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      background:rgba(0,0,0,.10);
+      padding:10px 12px;
+    }
+    .details > summary{
+      cursor:pointer;
+      list-style:none;
+      color:var(--muted);
+      font-size:12px;
+      user-select:none;
+    }
+    .details > summary::-webkit-details-marker{display:none;}
+    .report-table{
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      overflow:hidden;
+      background:rgba(0,0,0,.14);
+    }
+    .report-table table{width:100%; border-collapse:collapse; font-size:12px;}
+    .report-table th, .report-table td{
+      padding:8px 9px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      vertical-align:top;
+    }
+    .report-table th{color:var(--muted); font-weight:600; text-align:left; background:rgba(0,0,0,.20);}
+    .report-table td.num{font-family:var(--mono); text-align:right; font-variant-numeric:tabular-nums;}
+    .report-table tr:last-child td{border-bottom:none;}
+    .report-table .row-strong td:first-child{font-weight:700;}
+
     .bars{display:grid; gap:8px; margin-top:8px;}
     .bar{
       display:grid; grid-template-columns: 120px 1fr 62px; gap:10px; align-items:center;
@@ -134,88 +169,84 @@
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div>
-        <h1>Informe comparativo — Modelos IA vs Humano</h1>
-        <p class="sub">Resumen de métricas en test + detalle por modelo (matriz de confusión y classification report).</p>
-      </div>
-      <div class="pill">
-        <span class="dot good"></span>
-        <span><b>Fuente:</b> all_models_metrics.json</span>
-        <span class="muted mono" id="meta"></span>
-      </div>
-    </header>
+<div class="wrap">
+<header>
+<div>
+<h1>Informe comparativo — Modelos IA vs Humano</h1>
+<p class="sub">Resumen de métricas en test + detalle por modelo (matriz de confusión y classification report).</p>
+</div>
+<div class="pill">
+<span class="dot good"></span>
+<span><b>Fuente:</b> all_models_metrics.json</span>
+<span class="muted mono" id="meta"></span>
+</div>
+</header>
+<div class="grid">
+<section class="card">
+<div class="hd">
+<div>
+<div style="font-weight:700;">Comparativa (TEST)</div>
+<div class="muted" style="font-size:12px;">Acc, F1, Prec, Rec, ROC-AUC, Umbral y métricas derivadas (FPR/TNR).</div>
+</div>
+<div class="btns" id="sortBtns"></div>
+</div>
+<div class="bd">
+<table id="cmpTable">
+<thead>
+<tr>
+<th>Modelo</th>
+<th>Acc</th>
+<th>F1</th>
+<th>Prec</th>
+<th>Rec</th>
+<th>ROC-AUC</th>
+<th>Thr</th>
+<th>FPR</th>
+<th>TNR</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+<div style="margin-top:14px;">
+<div class="muted" style="font-size:12px; margin-bottom:8px;">Barras (comparación rápida)</div>
+<div class="bars" id="bars"></div>
+</div>
+</div>
+</section>
+<aside class="card">
+<div class="hd">
+<div>
+<div style="font-weight:700;">Detalle del modelo</div>
+<div class="muted" style="font-size:12px;">Selecciona un modelo para ver sus métricas completas.</div>
+</div>
+<span class="tag" id="selectedTag"><span class="dot warn"></span><span>—</span></span>
+</div>
+<div class="bd">
+<div class="kpis" id="kpis"></div>
+<div class="cols" style="margin-top:14px;">
 
-    <div class="grid">
-      <section class="card">
-        <div class="hd">
-          <div>
-            <div style="font-weight:700;">Comparativa (TEST)</div>
-            <div class="muted" style="font-size:12px;">Acc, F1, Prec, Rec, ROC-AUC, Umbral y métricas derivadas (FPR/TNR).</div>
-          </div>
-          <div class="btns" id="sortBtns"></div>
-        </div>
-        <div class="bd">
-          <table id="cmpTable">
-            <thead>
-              <tr>
-                <th>Modelo</th>
-                <th>Acc</th>
-                <th>F1</th>
-                <th>Prec</th>
-                <th>Rec</th>
-                <th>ROC-AUC</th>
-                <th>Thr</th>
-                <th>FPR</th>
-                <th>TNR</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+<div>
+<div class="muted" style="font-size:12px; margin:0 0 8px;">Classification report</div>
+<div class="report-table" id="reportTable"></div><pre id="report" style="display:none"></pre>
 
-          <div style="margin-top:14px;">
-            <div class="muted" style="font-size:12px; margin-bottom:8px;">Barras (comparación rápida)</div>
-            <div class="bars" id="bars"></div>
-          </div>
-        </div>
-      </section>
-
-      <aside class="card">
-        <div class="hd">
-          <div>
-            <div style="font-weight:700;">Detalle del modelo</div>
-            <div class="muted" style="font-size:12px;">Selecciona un modelo para ver sus métricas completas.</div>
-          </div>
-          <span class="tag" id="selectedTag"><span class="dot warn"></span><span>—</span></span>
-        </div>
-        <div class="bd">
-          <div class="kpis" id="kpis"></div>
-          <div class="cols" style="margin-top:14px;">
-            <div class="cm" id="cmBox"></div>
-            <div>
-              <div class="muted" style="font-size:12px; margin:0 0 8px;">Classification report</div>
-              <pre id="report"></pre>
-            </div>
-          </div>
-          <div style="margin-top:14px;">
-            <div class="muted" style="font-size:12px; margin:0 0 8px;">Runtime (si aplica)</div>
-            <pre id="runtime"></pre>
-          </div>
-        </div>
-      </aside>
-    </div>
-
-    <footer>
-      <div>Notas:</div>
-      <ul>
-        <li><span class="mono">FPR</span> = FP/(FP+TN) (falsos positivos sobre humanos). <span class="mono">TNR</span> = 1 - FPR.</li>
-        <li>Si BERT tiene AUC alto pero FPR alto, suele indicar problema de umbral/calibración o sesgo del score.</li>
-      </ul>
-    </footer>
-  </div>
-
-  <script>
+</div>
+</div>
+<div style="margin-top:14px;">
+<div class="muted" style="font-size:12px; margin:0 0 8px;">Matriz de confusión</div><div class="cm" id="cmBox"></div>
+<pre id="runtime" style="display:none"></pre>
+</div>
+</div>
+</aside>
+</div>
+<footer>
+<div>Notas:</div>
+<ul>
+<li><span class="mono">FPR</span> = FP/(FP+TN) (falsos positivos sobre humanos). <span class="mono">TNR</span> = 1 - FPR.</li>
+<li>Si BERT tiene AUC alto pero FPR alto, suele indicar problema de umbral/calibración o sesgo del score.</li>
+</ul>
+</footer>
+</div>
+<script>
     // === Datos embebidos desde tu all_models_metrics.json ===
     const DATA = {
       "bilstm_rand": {
@@ -382,9 +413,86 @@
     const selectedTag = document.querySelector("#selectedTag");
     const kpis = document.querySelector("#kpis");
     const cmBox = document.querySelector("#cmBox");
+    const reportTable = document.querySelector("#reportTable");
     const report = document.querySelector("#report");
     const runtime = document.querySelector("#runtime");
 
+
+    function renderReportTable(text){
+      if(!reportTable) return;
+      if(!text){
+        reportTable.innerHTML = `<div style="padding:10px 12px;" class="muted">—</div>`;
+        return;
+      }
+      const lines = text.replace(/\r/g,"").split("\n");
+      const rows = [];
+      for(const raw of lines){
+        const line = raw.trimEnd();
+        if(!line.trim()) continue;
+        if(line.includes("precision") && line.includes("recall") && line.includes("f1-score")) continue;
+
+        const re = /[-+]?\d*\.?\d+(?:e[-+]?\d+)?/gi;
+        const first = re.exec(line);
+        if(!first) continue;
+
+        const label = line.slice(0, first.index).trim().replace(/\s+/g," ");
+        const nums = [first[0]];
+        let m;
+        while((m = re.exec(line)) !== null) nums.push(m[0]);
+
+        if(nums.length >= 4){
+          const last4 = nums.slice(-4);
+          rows.push({label, precision:last4[0], recall:last4[1], f1:last4[2], support:last4[3]});
+        }else if(nums.length >= 2){
+          const last2 = nums.slice(-2);
+          rows.push({label, precision:"", recall:"", f1:last2[0], support:last2[1]});
+        }
+      }
+
+      const pretty = (lbl)=>{
+        if(lbl === "0" || lbl === "0.0") return "Humano (0)";
+        if(lbl === "1" || lbl === "1.0") return "IA (1)";
+        return lbl;
+      };
+      const fmt3 = (x)=>{
+        if(x === "" || x === null || x === undefined) return "—";
+        const n = Number(x);
+        return Number.isFinite(n) ? n.toFixed(3) : String(x);
+      };
+      const fmtInt = (x)=>{
+        const n = Number(x);
+        return Number.isFinite(n) ? String(Math.round(n)) : String(x);
+      };
+
+      let body = "";
+      for(const r of rows){
+        const strong = (r.label === "accuracy" || r.label === "macro avg" || r.label === "weighted avg");
+        body += `
+          <tr class="${strong ? "row-strong" : ""}">
+            <td>${pretty(r.label)}</td>
+            <td class="num">${fmt3(r.precision)}</td>
+            <td class="num">${fmt3(r.recall)}</td>
+            <td class="num">${fmt3(r.f1)}</td>
+            <td class="num">${fmtInt(r.support)}</td>
+          </tr>
+        `;
+      }
+
+      reportTable.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Clase</th>
+              <th class="num">Prec</th>
+              <th class="num">Rec</th>
+              <th class="num">F1</th>
+              <th class="num">Support</th>
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      `;
+    }
     function selectModel(name){
       const m = DATA[name];
       if(!m) return;
@@ -451,6 +559,7 @@
       `;
 
       report.textContent = m.classification_report || "";
+      renderReportTable(m.classification_report || "");
       runtime.textContent = JSON.stringify(m.runtime || {}, null, 2);
     }
 
