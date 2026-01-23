@@ -8,7 +8,7 @@ from settings import BERT_DIR, BILSTM_RAND_DIR, BILSTM_W2V_DIR, DEFAULT_MODEL, M
 from .model_service import device, load_bert_bundle, load_bilstm_bundle
 
 # =========================
-# Carga en arranque
+# Model registry
 # =========================
 BILSTM_RAND = load_bilstm_bundle("bilstm_rand", BILSTM_RAND_DIR)
 BILSTM_W2V = load_bilstm_bundle("bilstm_w2v", BILSTM_W2V_DIR)
@@ -22,7 +22,7 @@ MODEL_REGISTRY: Dict[str, Any] = {
 
 
 def health_payload() -> Dict[str, Any]:
-    """Payload de /health (idéntico al original)."""
+    """Build the JSON payload returned by the health endpoint."""
     return {
         "status": "ok",
         "device": str(device),
@@ -40,14 +40,13 @@ def health_payload() -> Dict[str, Any]:
 
 
 def models_payload() -> Dict[str, Any]:
-    """Payload de /models (idéntico al original)."""
+    """Build the JSON payload returned by the model listing endpoint."""
     return {"available": list(MODEL_REGISTRY.keys()), "default": DEFAULT_MODEL}
 
 
 def predict_payload(data: Dict[str, Any], args: Any) -> Tuple[Dict[str, Any], int]:
     """
-    Lógica completa de predicción (idéntica a tu endpoint original /predict).
-    `args` debe soportar `.get()` (Flask request.args).
+    Execute request validation, model selection, and inference, returning a response payload and status.
     """
     text = (data.get("text") or "").strip()
     model_name = (data.get("model") or args.get("model") or DEFAULT_MODEL).strip()

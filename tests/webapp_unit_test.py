@@ -10,10 +10,10 @@ from urllib.parse import urlencode
 
 def http_json(method: str, url: str, body: dict | None = None, headers: dict | None = None) -> Tuple[int, Optional[Dict[str, Any]], str]:
     """
-    Hace una request HTTP y devuelve (status_code, payload_dict, raw_text).
+    Issue an HTTP request and parse a JSON response if available.
 
-    - No requiere 'requests' (solo stdlib).
-    - Si el servidor responde con error (4xx/5xx), captura el HTTPError y devuelve igual el body.
+    - does not require 'requests' (just stdlib).
+    - if returns (4xx/5xx), capture the HTTPError and returns the body.
     """
     data = None
     req_headers = {"Accept": "application/json"}
@@ -47,6 +47,8 @@ def http_json(method: str, url: str, body: dict | None = None, headers: dict | N
 
 
 class TestAuthTextAPI(unittest.TestCase):
+    """Smoke tests for the running Flask API instance."""
+
     @classmethod
     def setUpClass(cls):
         cls.base = os.environ.get("BASE_URL", "http://127.0.0.1:8001").rstrip("/")
@@ -91,7 +93,7 @@ class TestAuthTextAPI(unittest.TestCase):
         return cast(Dict[str, Any], payload)
 
     # -----------------------
-    # Tests: endpoints base
+    # Tests: base endpoints
     # -----------------------
     def test_health_ok(self):
         st, payload, raw = http_json("GET", f"{self.base}/health")
@@ -110,7 +112,7 @@ class TestAuthTextAPI(unittest.TestCase):
         self.assertIn("default", payload)
 
     # -----------------------
-    # Tests: validaciones / caminos de error
+    # Tests: validators
     # -----------------------
     def test_predict_empty_text_400(self):
         st, payload, _ = self.post_predict({"text": ""})
@@ -140,13 +142,14 @@ class TestAuthTextAPI(unittest.TestCase):
         self.assertIn("available", payload)
 
     # -----------------------
-    # Tests: selección de modelo / inferencia (adaptativo)
+    # Tests: model selection / inference (adaptative)
     # -----------------------
     def test_predict_default_model_path(self):
         """
-        Cubre el camino "default model":
-        - si el default está cargado => espera 200
-        - si no está cargado => espera 500 "modelo <default> no cargado"
+        Cover the default-model inference path or the not-loaded error path:
+        
+        - if default model is loaded => expects 200
+        - if default model is not loaded => expects 500 "modelo <default> no cargado"
         """
         loaded = bool(self.models_status.get(self.default_model, {}).get("loaded"))
         st, payload, raw = self.post_predict({"text": self.long_text})
@@ -164,9 +167,9 @@ class TestAuthTextAPI(unittest.TestCase):
 
     def test_predict_query_model_each_available(self):
         """
-        Para cada modelo disponible:
-        - si loaded => 200 y payload contiene campos esperados
-        - si no loaded => 500 "modelo X no cargado"
+        Cover model selection via query string for each advertised model:
+        - if model loaded => 200 and payload contains expected fields
+        - if model not loaded => 500 "modelo X no cargado"
         """
         for model in self.available:
             with self.subTest(model=model):
@@ -199,7 +202,7 @@ class TestAuthTextAPI(unittest.TestCase):
 
     def test_body_model_overrides_query(self):
         """
-        Prioridad actual: body['model'] > query ?model=... > default
+        Validate body model precedence over query model
         """
         # Elegimos dos modelos distintos si se puede
         if len(self.available) < 2:
@@ -208,7 +211,7 @@ class TestAuthTextAPI(unittest.TestCase):
         body_model = self.available[0]
         query_model = self.available[1] if self.available[1] != body_model else self.available[-1]
 
-        # Si el body_model no está cargado, el resultado esperado es 500 aunque la query diga otro
+        # Si el body_model no está cargado, el resultado esperado es 500
         loaded_body = bool(self.models_status.get(body_model, {}).get("loaded"))
 
         st, payload, raw = self.post_predict(
@@ -226,20 +229,12 @@ class TestAuthTextAPI(unittest.TestCase):
 
     def test_predict_named_route_behavior(self):
         """
-        Cubre el endpoint /predict/<model_name>.
-        Si mantuviste exactamente la lógica original, el <model_name> NO se impone salvo que
-        venga por query o body (porque el handler vuelve a leer el JSON en predict()).
-
-        Este test NO fuerza una expectativa rígida de 'model == <model_name>' para no romper
-        si mantuviste el comportamiento original.
+        Exercise the /predict/<model_name> route and validate response status semantics
         """
         target = self.available[0] if self.available else "bilstm_rand"
         st, payload, raw = self.post_predict_named(target, {"text": self.long_text})
         payload = self.assertPayloadDict(payload, raw)
 
-
-        # Lo único que afirmamos aquí es que el endpoint responde y que respeta la semántica de "loaded".
-        # Si el default no está cargado, puede devolver 500.
         if st == 200:
             self.assertIn("model", payload)
             self.assertIn("decision", payload)

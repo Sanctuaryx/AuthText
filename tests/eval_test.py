@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import re
 from typing import List, Tuple, Dict, Optional, Any
 
 import numpy as np
@@ -33,27 +34,27 @@ import logic.models.dataset as dataset
 import logic.models.vocab as v
 # ==============================================
 
-# (Opcional) BERT Fine-tune deps
+# (Optional) BERT Fine-tune deps
 try:
     from transformers import AutoTokenizer, AutoModelForSequenceClassification
 except Exception:
     AutoTokenizer = None
     AutoModelForSequenceClassification = None
 
-# (Opcional) calibrator
+# (Optional) calibrator
 try:
     import joblib
 except Exception:
     joblib = None
 
 
-# ========= PARTE 1: utilidades BiLSTM  =========
+# ========= BiLSTM utilities =========
 
 def load_test_examples(path: str) -> List[dataset.TextExample]:
     """
-    Carga ejemplos de test desde un CSV con columnas:
+    Load labeled test examples from a CSV file containing:
       - text
-      - generated (0 = humano, 1 = IA)
+      - generated (0 = human, 1 = AI)
     """
     p = pathlib.Path(path)
     if p.suffix.lower() != ".csv":
@@ -95,8 +96,7 @@ def evaluate_bilstm(
     device: torch.device,
 ) -> Dict:
     """
-    Evalúa un modelo BiLSTM (con vocab.json, config.json, model.pt)
-    en el CSV de test (text,generated).
+    Evaluate a BiLSTM detector on a labeled test CSV and compute classification metrics
     """
     print(f"\n=== Evaluando BiLSTM en {model_dir} ===")
 
@@ -199,12 +199,11 @@ def evaluate_bilstm(
     return metrics
 
 
-# ========= PARTE 2: utilidades BERT fine-tuned (HF folder) =========
+# ========= BERT fine-tuned utilities =========
 
 class WindowDatasetBERT(Dataset):
     """
-    Tokeniza cada documento en 1..N ventanas (overflow + stride).
-    Guardamos doc_id para agregar por documento al final.
+    Tokenize documents into overlapping windows and retain document ids for later aggregation
     """
     def __init__(
         self,
@@ -261,8 +260,7 @@ def bert_predict_doc_probs(
     agg: str,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Predice probs por ventana y agrega por doc_id usando agg.
-    Devuelve (doc_probs, doc_labels).
+    Compute window-level positive-class probabilities and aggregate them to document-level outputs
     """
     model.eval()
     probs_all = []
@@ -323,8 +321,7 @@ def bert_predict_doc_probs(
 
 def _read_detector_runtime(model_dir: pathlib.Path) -> Dict:
     """
-    En tu train_bert actual, guardas en config.json (HF) un bloque:
-      config["detector_runtime"] = {...}
+    Read detector runtime parameters from the Hugging Face config.json 'detector_runtime' block
     """
     cfg_path = model_dir / "config.json"
     if not cfg_path.exists():
@@ -348,11 +345,7 @@ def evaluate_bert_finetuned(
     device: torch.device,
 ) -> Dict:
     """
-    Evalúa BERT fine-tuned en una carpeta HF:
-      - config.json (HF) con detector_runtime dentro
-      - model.safetensors / pytorch_model.bin
-      - tokenizer files
-      - (opcional) calibrator.joblib
+    Evaluate a fine-tuned Hugging Face sequence classifier on a labeled test CSV:
     """
     if AutoTokenizer is None or AutoModelForSequenceClassification is None:
         raise RuntimeError("transformers no está instalado o no se pudo importar.")
@@ -385,7 +378,7 @@ def evaluate_bert_finetuned(
     model = AutoModelForSequenceClassification.from_pretrained(model_dir).to(device)
     model.eval()
 
-    # calibrator (si existe)
+    # calibrator
     calibrator = None
     calib_path = model_dir / "calibrator.joblib"
     if calib_path.exists():
@@ -406,7 +399,7 @@ def evaluate_bert_finetuned(
 
     probs_doc, labels_doc = bert_predict_doc_probs(model, test_loader, device=device, agg=agg)
 
-    # calibración a nivel documento (después de agregar ventanas)
+    # doc level calibration (after windowing)
     probs_used = probs_doc
     if calibrator is not None:
         probs_used = calibrator.predict_proba(probs_doc.reshape(-1, 1))[:, 1].astype(np.float32)
@@ -461,129 +454,64 @@ def evaluate_bert_finetuned(
     return metrics
 
 
-# ========= PARTE 3 (opcional): BERT+MLP legacy =========
+# ========= orchestrator and comparison =========
 
-class NumpyDataset(Dataset):
-    def __init__(self, X: np.ndarray, y: np.ndarray) -> None:
-        self.X = torch.from_numpy(X).float()
-        self.y = torch.from_numpy(y).float()
+# ========= HTML report generation (results.html) =========
 
-    def __len__(self) -> int:
-        return self.X.shape[0]
-
-    def __getitem__(self, idx: int):
-        return self.X[idx], self.y[idx]
+_DATA_BLOCK_RE = re.compile(r"const\s+DATA\s*=\s*\{.*?\};", re.DOTALL)
 
 
-class MLPClassifier(nn.Module):
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dim: int = 256,
-        dropout: float = 0.3,
-    ) -> None:
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, 1),
-        )
-
-    def forward(self, x):
-        logits = self.net(x).squeeze(1)
-        return logits
-
-
-def load_npz(path: pathlib.Path) -> tuple[np.ndarray, np.ndarray]:
-    data = np.load(path)
-    return data["X"], data["y"]
-
-
-def evaluate_bert_mlp(
-    model_dir: pathlib.Path,
-    test_npz: pathlib.Path,
-    batch_size: int,
-    device: torch.device,
-) -> Dict:
+def _inject_metrics_into_html(template_html: str, metrics: Dict[str, Dict]) -> str:
     """
-    LEGACY: Evalúa el modelo BERT+MLP usando:
-      - model_dir: contiene model.pt y config.json
-      - test_npz: .npz con X (embeddings) e y (labels)
+    Replace the `const DATA = {...};` block in an HTML template with the provided metrics payload.
+    
     """
-    print(f"\n=== Evaluando BERT+MLP (legacy) en {model_dir} ===")
+    data_json = json.dumps(metrics, ensure_ascii=False, indent=2)
+    replacement = f"const DATA = {data_json};"
 
-    with (model_dir / "config.json").open("r", encoding="utf-8") as f:
-        cfg = json.load(f)
+    if _DATA_BLOCK_RE.search(template_html) is None:
+        raise ValueError("No se encontró el bloque `const DATA = {...};` en la plantilla HTML.")
 
-    input_dim = int(cfg["input_dim"])
-    hidden_dim = int(cfg.get("hidden_dim", 256))
-    threshold = float(cfg.get("threshold", 0.5))
+    return _DATA_BLOCK_RE.sub(replacement, template_html, count=1)
 
-    model = MLPClassifier(
-        input_dim=input_dim,
-        hidden_dim=hidden_dim,
-        dropout=0.3,
-    ).to(device)
 
-    state_dict = torch.load(model_dir / "model.pt", map_location=device)
-    model.load_state_dict(state_dict)
+def _resolve_html_template_path(metrics_dir: pathlib.Path) -> pathlib.Path:
+    """
+    Resolve the HTML template path using a fixed search order.
 
-    X_test, y_test = load_npz(test_npz)
-    test_ds = NumpyDataset(X_test, y_test)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
-
-    model.eval()
-    all_probs = []
-    all_labels = []
-
-    with torch.no_grad():
-        for X, y in tqdm(test_loader, desc="Test BERT+MLP", leave=False):
-            X = X.to(device)
-            y = y.to(device)
-
-            logits = model(X)
-            probs = torch.sigmoid(logits)
-
-            all_probs.append(probs.cpu())
-            all_labels.append(y.cpu())
-
-    probs = torch.cat(all_probs).numpy()
-    labels = torch.cat(all_labels).numpy()
-
-    roc = roc_auc_score(labels, probs)
-    preds = (probs >= threshold).astype(int)
-
-    acc = accuracy_score(labels, preds)
-    f1 = f1_score(labels, preds)
-    precision, recall, _, _ = precision_recall_fscore_support(
-        labels, preds, average="binary", zero_division=0
+    Orden de búsqueda:
+      1) metrics/results.html (if it already exists, it is used as a template and overwritten with new data)
+      2) tests/resources/results_template.html
+    """
+    candidates = [
+        metrics_dir / "results.html",
+        metrics_dir / "tests" / "resources" / "results_template.html",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    raise FileNotFoundError(
+        "No se encontró plantilla HTML. Coloca `results.html` en `metrics/` "
+        "o `results_template.html` en `tests/resources/`"
     )
 
-    cm = confusion_matrix(labels, preds)
-    report = classification_report(labels, preds, digits=3)
 
-    metrics = {
-        "num_examples": int(len(labels)),
-        "threshold_used": float(threshold),
-        "accuracy": float(acc),
-        "f1": float(f1),
-        "precision": float(precision),
-        "recall": float(recall),
-        "roc_auc": float(roc),
-        "confusion_matrix": cm.tolist(),
-        "classification_report": report,
-    }
+def write_results_html(metrics: Dict[str, Dict], metrics_dir: pathlib.Path) -> pathlib.Path:
+    """
+    Generate or update results.html by embedding the provided metrics into an HTML template.
 
-    out_path = model_dir / "test_metrics.json"
-    with out_path.open("w", encoding="utf-8") as f:
-        json.dump(metrics, f, ensure_ascii=False, indent=2)
-    print(f"Métricas guardadas en {out_path}")
+    - input: `metrics` (model dictionary) y `metrics_dir` (path to save the resutls).
+    - output: `metrics_dir/results.html` updated.
+    """
+    template_path = _resolve_html_template_path(metrics_dir)
+    template_html = template_path.read_text(encoding="utf-8")
+    out_html = _inject_metrics_into_html(template_html, metrics)
 
-    return metrics
+    out_path = metrics_dir / "results.html"
+    out_path.write_text(out_html, encoding="utf-8")
+    return out_path
 
 
-# ========= PARTE 4: orquestador y comparación =========
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -642,7 +570,6 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # dispositivo
     if torch.cuda.is_available():
         device = torch.device("cuda")
         backend = "cuda"
@@ -675,13 +602,7 @@ def main() -> None:
         mdir = pathlib.Path(args.bert_dir)
         all_results["bert"] = evaluate_bert_finetuned(mdir, test_csv, args.batch_size, device)
 
-    # LEGACY: BERT+MLP
-    if args.bert_mlp_dir is not None and args.bert_test_npz is not None:
-        mdir = pathlib.Path(args.bert_mlp_dir)
-        tnpz = pathlib.Path(args.bert_test_npz)
-        all_results["bert_mlp_legacy"] = evaluate_bert_mlp(mdir, tnpz, args.batch_size, device)
-
-    # Resumen comparativo
+    # Comparative summary
     if all_results:
         print("\n\n===== RESUMEN COMPARATIVO (TEST) =====")
         print(f"{'Modelo':18} | {'Acc':6} | {'F1':6} | {'Prec':6} | {'Rec':6} | {'ROC-AUC':7} | {'Thr':6}")
@@ -702,8 +623,18 @@ def main() -> None:
         with out_all.open("w", encoding="utf-8") as f:
             json.dump(all_results, f, ensure_ascii=False, indent=2)
         print(f"\nMétricas de todos los modelos guardadas en {out_all}")
+
+        out_html = write_results_html(all_results, out_all.parent)
+        print(f"Informe HTML generado en {out_html}")
     else:
         print("No se ha evaluado ningún modelo (revisa los argumentos).")
+        try:
+            out_all = ROOT / "metrics" / "all_models_metrics.json"
+            out_all.parent.mkdir(parents=True, exist_ok=True)
+            out_html = write_results_html({}, out_all.parent)
+            print(f"Informe HTML (vacío) generado en {out_html}")
+        except Exception as e:
+            print(f"No se pudo generar informe HTML: {e}")
 
 
 if __name__ == "__main__":

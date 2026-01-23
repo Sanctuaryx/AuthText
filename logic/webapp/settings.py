@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 # =========================
-# Config por entorno
+# Runtime configuration loaded from environment variables.
 # =========================
 BILSTM_RAND_DIR = os.getenv("BILSTM_RAND_DIR", "logic/artifacts/bilstm_rand")
 BILSTM_W2V_DIR = os.getenv("BILSTM_W2V_DIR", "logic/artifacts/bilstm_w2v")

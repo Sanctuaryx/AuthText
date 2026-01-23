@@ -10,12 +10,12 @@ from settings import CONF_BAND
 from services.model_service import device
 
 def confidence_label(prob: float, thr: float) -> str:
-    """Lógica idéntica al original."""
+    """Classify prediction confidence based on proximity to the decision threshold."""
     return "low" if abs(prob - thr) < CONF_BAND else "high"
 
 
 def predict_bert(bundle: BERTBundle, text: str) -> Dict[str, Any]:
-    """Inferencia BERT (idéntica al original)."""
+    """Run Transformer inference on a single document using windowing and return a normalized response payload."""
     assert bundle.tokenizer is not None and bundle.model is not None
 
     enc = bundle.tokenizer(
@@ -42,7 +42,7 @@ def predict_bert(bundle: BERTBundle, text: str) -> Dict[str, Any]:
 
         probs_win = torch.softmax(out.logits, dim=-1)[:, 1].detach().cpu().numpy()
 
-    # agregación por documento
+    # doc aggregation
     if bundle.agg == "mean":
         prob_doc = float(probs_win.mean())
     elif bundle.agg == "max":
@@ -50,7 +50,7 @@ def predict_bert(bundle: BERTBundle, text: str) -> Dict[str, Any]:
     else:
         prob_doc = float(np.median(probs_win))
 
-    # calibración a nivel documento (si existe)
+    # doc calibration
     prob_used = prob_doc
     if bundle.calibrator is not None:
         prob_used = float(bundle.calibrator.predict_proba(np.array([[prob_doc]], dtype=np.float32))[:, 1][0])

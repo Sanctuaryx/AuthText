@@ -10,12 +10,12 @@ from settings import CONF_BAND
 from services.model_service import device
 
 def confidence_label(prob: float, thr: float) -> str:
-    """Lógica idéntica al original."""
+    """Classify prediction confidence based on proximity to the decision threshold."""
     return "low" if abs(prob - thr) < CONF_BAND else "high"
 
 
 def predict_bilstm(bundle: BiLSTMBundle, text: str) -> Dict[str, Any]:
-    """Inferencia BiLSTM (idéntica al original)."""
+    """Run BiLSTM inference on a single document and return a normalized response payload."""
     assert bundle.model is not None and bundle.vocab is not None
 
     ids = safe_vocab_encode(bundle.vocab, text)

@@ -16,7 +16,7 @@ from models.vocab import Vocab
 
 @dataclass
 class BiLSTMBundle:
-    """Contenedor de artefactos/estado para un modelo BiLSTM."""
+    """Container for a loaded BiLSTM detector and its preprocessing artifacts."""
     name: str
     model_dir: str
     model: Optional[BiLSTMClassifier] = None
@@ -30,7 +30,7 @@ class BiLSTMBundle:
 
 @dataclass
 class BERTBundle:
-    """Contenedor de artefactos/estado para un modelo BERT (transformers)."""
+    """Container for a loaded Transformer detector and optional probability calibrator."""
     name: str = "bert"
     model_dir: str = BERT_DIR
 

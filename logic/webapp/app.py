@@ -19,11 +19,11 @@ app = Flask(__name__)
 @app.get("/health")
 def health():
     """
-    Healthcheck del servicio.
+    Return runtime status and model loading state.
 
-    Responsabilidad:
-      - Exponer el estado del servicio por HTTP.
-      - Delegar el payload a modelService sin ejecutar lógica de negocio aquí.
+    Responsibility:
+    - Display the service status via HTTP.
+    - Delegate the payload to modelService without executing business logic here.
     """
     return jsonify(health_payload())
 
@@ -31,11 +31,11 @@ def health():
 @app.get("/models")
 def list_models():
     """
-    Lista los modelos disponibles y el modelo por defecto.
+    Return available model identifiers and the default selection.
 
-    Responsabilidad:
-      - Responder por HTTP.
-      - Delegar el payload a modelService.
+    Responsibility:
+    - Respond via HTTP.
+    - Delegate the payload to modelService.
     """
     return jsonify(models_payload())
 
@@ -43,12 +43,12 @@ def list_models():
 @app.post("/predict")
 def predict():
     """
-    Realiza una predicción.
+    Run a prediction using the request payload and selected model.
 
-    Responsabilidad:
-      - Parsear el JSON de entrada.
-      - Delegar validaciones e inferencia a modelService.
-      - Convertir el resultado en respuesta HTTP (jsonify + status code).
+    Responsibility:
+    - Parse the input JSON.
+    - Delegate validations and inference to modelService.
+    - Convert the result into an HTTP response (json + status code).
     """
     return _predict_impl()
 
@@ -56,12 +56,7 @@ def predict():
 @app.post("/predict/<model_name>")
 def predict_named(model_name: str):
     """
-    Realiza una predicción usando un modelo explícito en la URL.
-
-    Nota:
-      - Se mantiene el comportamiento original: inyectar 'model' en el JSON
-        y luego ejecutar la misma lógica que /predict.
-      - Se conserva la línea `request.args = request.args.copy()` tal cual estaba.
+    Route variant that forwards a path model name through the standard handler.
     """
     return _predict_impl(forced_model=model_name)
 

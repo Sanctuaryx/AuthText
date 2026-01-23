@@ -15,8 +15,8 @@ from models.vocab import Vocab
 
 def load_vocab_and_config(model_dir: str) -> Tuple[Vocab, dict]:
     """
-    Carga vocabulario y configuración desde un directorio de artefactos.
-    Lógica idéntica al original.
+    Load `vocab.json` and `config.json` from a model artifact directory.
+
     """
     model_dir_path = pathlib.Path(model_dir)
 
@@ -38,8 +38,7 @@ def load_vocab_and_config(model_dir: str) -> Tuple[Vocab, dict]:
 
 def safe_vocab_encode(vocab: Vocab, text: str) -> list[int]:
     """
-    Codifica texto en ids manteniendo compatibilidad (encode vs encode_text).
-    Lógica idéntica al original.
+    Encode text using whichever vocabulary API is available
     """
     if hasattr(vocab, "encode"):
         return vocab.encode(text)  # type: ignore[attr-defined]

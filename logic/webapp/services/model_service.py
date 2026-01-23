@@ -12,15 +12,14 @@ from io_utils import load_vocab_and_config
 from models.custom_bilstm import BiLSTMClassifier
 
 # =========================
-# Device
+# Device selection
 # =========================
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def load_bilstm_bundle(name: str, model_dir: str) -> BiLSTMBundle:
     """
-    Carga un bundle BiLSTM desde disco.
-    Lógica idéntica al original (incluye try/except y flags loaded/error).
+    Load a BiLSTM bundle from artifacts and prepare the model for inference
     """
     b = BiLSTMBundle(name=name, model_dir=model_dir)
     try:
@@ -53,8 +52,7 @@ def load_bilstm_bundle(name: str, model_dir: str) -> BiLSTMBundle:
 
 def load_bert_bundle(model_dir: str) -> BERTBundle:
     """
-    Carga un bundle BERT desde disco.
-    Lógica idéntica al original (config.json y calibrator.joblib opcionales).
+    Load a Transformer bundle (tokenizer, model, optional calibrator) for inference.
     """
     b = BERTBundle(model_dir=model_dir)
     try:
