@@ -485,7 +485,7 @@ def _resolve_html_template_path(metrics_dir: pathlib.Path) -> pathlib.Path:
     """
     candidates = [
         metrics_dir / "results.html",
-        metrics_dir / "tests" / "resources" / "results_template.html",
+        ROOT / "tests" / "resources" / "results_template.html",
     ]
     for p in candidates:
         if p.exists():
@@ -524,13 +524,13 @@ def main() -> None:
     parser.add_argument(
         "--bilstm_rand_dir",
         type=str,
-        default=None,
+        default=str(ROOT / "logic" / "artifacts" / "bilstm_rand"),
         help="Directorio del modelo BiLSTM base (embeddings aleatorios).",
     )
     parser.add_argument(
         "--bilstm_w2v_dir",
         type=str,
-        default=None,
+        default=str(ROOT / "logic" / "artifacts" / "bilstm_w2v"),
         help="Directorio del modelo BiLSTM + Word2Vec.",
     )
     parser.add_argument(
@@ -544,24 +544,10 @@ def main() -> None:
     parser.add_argument(
         "--bert_dir",
         type=str,
-        default=None,
+        default=str(ROOT / "logic" / "artifacts" / "bert"),
         help="Directorio del BERT fine-tuned (carpeta HF guardada por train_bert).",
     )
-
-    # LEGACY: BERT+MLP por embeddings NPZ
-    parser.add_argument(
-        "--bert_mlp_dir",
-        type=str,
-        default=None,
-        help="(Legacy) Directorio del modelo BERT+MLP (model.pt, config.json).",
-    )
-    parser.add_argument(
-        "--bert_test_npz",
-        type=str,
-        default=None,
-        help="(Legacy) Ruta al .npz de test para BERT+MLP (X,y).",
-    )
-
+    
     parser.add_argument(
         "--batch_size",
         type=int,
