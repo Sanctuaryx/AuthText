@@ -93,7 +93,7 @@ def predict_doc_probs(
     model,
     loader: DataLoader,
     device: torch.device,
-    agg: str = "mean",  # mean|median|max|trimmed_mean
+    agg: str = "trimmed_mean",  # mean|median|max|trimmed_mean
     trimmed_alpha: float = 0.1,  # solo para trimmed_mean
     positive_label_index: int = 1,  # por defecto: logits[:,1] = P(clase=1)
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -181,7 +181,7 @@ def pick_threshold_precision_first(
     probs: np.ndarray,
     *,
     max_fpr: Optional[float] = 0.15,     # None para no aplicar constraint de FPR
-    min_recall: float = 0.85,            # constraint de recall (tú lo ajustas)
+    min_recall: float = 0.85,            # constraint de recall
     steps: int = 500,
     tie_breaker: str = "f1",             # "f1" o "acc"
 ) -> Optional[dict]:
@@ -316,14 +316,14 @@ def main() -> None:
         "--pos_weight",
         type=float,
         default=1.0,
-        help="Peso para clase positiva (1=IA). Si quieres bajar FP, normalmente sube el peso de la clase 0, "
+        help="Peso para clase positiva (1=IA). para bajar FP, se sube el peso de la clase 0, "
              "lo cual se logra poniendo pos_weight < 1 (ej 0.7) o usando --neg_weight > 1.",
     )
     ap.add_argument(
         "--neg_weight",
         type=float,
         default=1.3,
-        help="Peso para clase negativa (0=humano). Para bajar FP, ponlo >1 (ej 1.2..2.0).",
+        help="Peso para clase negativa (0=humano). Para bajar FP.",
     )
 
     # ===== Diagnóstico =====
@@ -394,7 +394,7 @@ def main() -> None:
 
     scaler = torch.amp.GradScaler(enabled=(device.type == "cuda"))
 
-    # ===== Best model selection: ahora priorizamos PRECISION (con constraints) =====
+    # ===== Best model selection: prioriza PRECISION (con constraints) =====
     best_key = None  # guardará la tupla de comparación
     best_thr = 0.5
     bad_epochs = 0
@@ -607,7 +607,7 @@ def main() -> None:
             if args.calibrate and best_calibrator is not None:
                 joblib.dump(best_calibrator, out_dir / "calibrator.joblib")
 
-            # escribe un archivo explícito con el threshold (para evitar confusiones)
+            # escribe un archivo explícito con el threshold
             (out_dir / "best_threshold.json").write_text(
                 json.dumps(
                     {
@@ -625,7 +625,7 @@ def main() -> None:
                 encoding="utf-8",
             )
 
-            # también guarda en config.json (como antes) pero con más campos
+            # también guarda en config.json pero con más campos
             cfg_path = out_dir / "config.json"
             hf_cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
             hf_cfg["detector_runtime"] = {
