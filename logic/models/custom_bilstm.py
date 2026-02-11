@@ -68,7 +68,7 @@ class BiLSTMClassifier(nn.Module):
         out, _ = nn.utils.rnn.pad_packed_sequence(packed_out, batch_first=True)
         # out: (B, L, 2H)
 
-        # Atención (enmascarando padding)
+        # enmascarando padding
         attn_scores = self.attn_w(out).squeeze(-1)  # (B, L)
 
         # mask: True en posiciones padding

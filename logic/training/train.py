@@ -260,7 +260,7 @@ def main() -> None:
                 print("Early stopping por falta de mejora en ROC-AUC.")
                 break
 
-    # 5) Búsqueda de mejor umbral según F1 (si tenemos probs/labels)
+    # 5) Búsqueda de mejor umbral según F1 (si hay probs/labels)
     if best_probs is not None and best_labels is not None:
         thresholds = np.linspace(0.1, 0.9, 17)
         best_threshold = 0.5
