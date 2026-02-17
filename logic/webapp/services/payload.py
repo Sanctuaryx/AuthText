@@ -5,21 +5,23 @@ from typing import Any, Dict, Tuple
 from inference.inference_bilstm import predict_bilstm
 from inference.inference_bert import predict_bert
 from settings import BERT_DIR, BILSTM_RAND_DIR, BILSTM_W2V_DIR, DEFAULT_MODEL, MIN_WORDS
-from .model_service import device, load_bert_bundle, load_bilstm_bundle
+from .model_service import device
+from .model_service import TorchBundleFactory, device
 
 # =========================
 # Model registry
 # =========================
-BILSTM_RAND = load_bilstm_bundle("bilstm_rand", BILSTM_RAND_DIR)
-BILSTM_W2V = load_bilstm_bundle("bilstm_w2v", BILSTM_W2V_DIR)
-BERT = load_bert_bundle(BERT_DIR)
+_factory = TorchBundleFactory(device_=device)
+
+BILSTM_RAND = _factory.create_bilstm_bundle("bilstm_rand", BILSTM_RAND_DIR)
+BILSTM_W2V = _factory.create_bilstm_bundle("bilstm_w2v", BILSTM_W2V_DIR)
+BERT = _factory.create_bert_bundle("bert", BERT_DIR)
 
 MODEL_REGISTRY: Dict[str, Any] = {
     "bilstm_rand": BILSTM_RAND,
     "bilstm_w2v": BILSTM_W2V,
     "bert": BERT,
 }
-
 
 def health_payload() -> Dict[str, Any]:
     """Build the JSON payload returned by the health endpoint."""
