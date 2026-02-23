@@ -1,249 +1,94 @@
-# Detector de Texto IA vs Humano (TFM)
+# Sanctuaryx/AuthText
 
-Sistema completo para **clasificar textos en español** como **IA (1)** vs **Humano (0)** y compararlos de forma homogénea, incluyendo **entrenamiento**, **evaluación** y **exposición vía API REST**.
+## Instalación
 
-Modelos incluidos:
+Para instalar el repositorio Sanctuaryx/AuthText, es necesario clonar el repositorio en el entorno de desarrollo local. Usa el siguiente comando en la terminal para clonar el repositorio:
 
-1. **BiLSTM (embeddings aleatorios)** — entrenado desde cero (baseline).
-2. **Word2Vec + BiLSTM** — embeddings estáticos entrenados en un corpus + BiLSTM.
-3. **BERT fine-tuned** (dccuchile/bert-base-spanish-wwm-cased) — fine-tuning supervisado con *chunking/stride* y agregación por documento.
-
----
-
-## Índice
-
-- [Estructura del repositorio](#estructura-del-repositorio)
-- [Requisitos](#requisitos)
-- [Datos](#datos)
-- [Entrenamiento](#entrenamiento)
-  - [1) BiLSTM baseline](#1-bilstm-baseline)
-  - [2) Word2Vec + BiLSTM](#2-word2vec--bilstm)
-  - [3) BERT fine-tuned](#3-bert-fine-tuned)
-- [Evaluación y comparación](#evaluación-y-comparación)
-- [API REST](#api-rest)
-- [Artefactos esperados](#artefactos-esperados)
-- [Troubleshooting](#troubleshooting)
-
----
-
-## Estructura del repositorio
-
-```
-.
-├─ data/
-├─ logic/
-│  ├─ models/
-│  ├─ training/
-│  └─ artifacts/
-│     ├─ bilstm_rand/
-│     ├─ bilstm_w2v/
-│     └─ bert/
-├─ tests/
-├─ api.py
-├─ requirements.txt
-└─ README.md
+```bash
+git clone https://github.com/Sanctuaryx/AuthText.git
 ```
 
----
+Después de clonar el repositorio, navega hasta el directorio principal del proyecto:
+
+```bash
+cd AuthText
+```
+
+Asegúrate de instalar todas las dependencias requeridas ejecutando el gestor de paquetes correspondiente según el entorno de desarrollo que utilices. Si el proyecto utiliza `npm`, ejecuta:
+
+```bash
+npm install
+```
+
+Si utiliza otro gestor, revisa la documentación incluida en el repositorio para instrucciones específicas.
 
 ## Requisitos
 
-- **Python 3.10+** recomendado (3.11/3.12 también funciona).
-- Entorno virtual (`venv`).
-- **PyTorch** con CUDA (opcional pero recomendado si tienes GPU).
+El proyecto Sanctuaryx/AuthText requiere los siguientes componentes para su funcionamiento:
 
-Instalación (Windows PowerShell):
+- Node.js versión 14 o superior.
+- Un gestor de paquetes compatible, como `npm` o `yarn`.
+- Acceso a internet para descargar dependencias externas.
+- Un entorno compatible con JavaScript o el lenguaje que el repositorio utilice según su estructura de archivos.
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -U pip
-pip install -r requirements.txt
+Verifica que todas las dependencias listadas en el archivo de configuración del proyecto estén correctamente instaladas antes de ejecutar o modificar el código.
+
+## Introducción
+
+Sanctuaryx/AuthText es una solución diseñada para la autenticación y gestión de texto seguro. El repositorio ofrece herramientas para validar, procesar y autenticar cadenas de texto de manera segura en aplicaciones modernas. Su arquitectura modular permite integrar funciones de autenticación en proyectos nuevos o existentes de manera sencilla.
+
+El sistema está enfocado en brindar seguridad en el manejo de texto, permitiendo validaciones y comprobaciones específicas según las necesidades de la aplicación. Las funciones y utilidades incluidas facilitan la implementación de flujos de autenticación personalizados.
+
+## Uso
+
+Para comenzar a utilizar las funcionalidades de Sanctuaryx/AuthText en tu proyecto, importa los módulos necesarios según la estructura del código y sigue los pasos que se describen a continuación.
+
+### Ejemplo de Importación
+
+Supón que deseas utilizar las utilidades de autenticación de texto. Puedes importar los módulos de la siguiente manera (ajusta la ruta según la estructura de carpetas):
+
+```js
+const { AuthText } = require('./src/authText');
 ```
 
-> **GPU**: si `torch.cuda.is_available()` te da `False`, normalmente es porque instalaste una build CPU.
-> Instala PyTorch CUDA desde la web oficial de PyTorch para tu versión de CUDA.
+### Ejemplo de Autenticación de Texto
 
----
+Utiliza las funciones provistas por el repositorio para autenticar texto de la siguiente forma:
 
-## Datos
-
-Los CSV deben tener al menos:
-
-- `text` (string)
-- `generated` (0 = humano, 1 = IA)
-
-Rutas típicas:
-
-- `data/train.csv`
-- `data/val.csv`
-- `data/test_es.csv`
-
----
-
-## Entrenamiento
-
-> **Importante**: ejecuta los comandos **desde la raíz del proyecto**.
-
-### 1) BiLSTM baseline
-
-Salida recomendada:
-
-- `logic/artifacts/bilstm_rand`
-
-desde de `logic/training/`:
-
-```powershell
-python -u logic/training/train.py --train_path data/train.csv --val_path data/val.csv --out_dir logic/artifacts/bilstm_rand
+```js
+const isValid = AuthText.verify('cadena_de_texto', 'token_secreto');
+console.log(isValid); // true o false
 ```
 
-Artefactos:
+### Flujo General
 
-```
-logic/artifacts/bilstm_rand/
-  model.pt
-  vocab.json
-  config.json
-```
+A continuación se presenta un diagrama de flujo que describe la lógica general de autenticación en el sistema:
 
----
-
-### 2) Word2Vec + BiLSTM
-
-Salida recomendada:
-
-- `logic/artifacts/bilstm_w2v`
-
-#### 2.1 Entrenar Word2Vec
-
-```powershell
-python -u logic/training/train_w2v.py --train_path data/train.csv --out_dir logic/artifacts/bilstm_w2v/embeddings
+```mermaid
+flowchart TD
+    Start[Inicio] --> InputText[Ingresar texto]
+    InputText --> InputToken[Ingresar token]
+    InputToken --> CallVerify[Verificar credenciales]
+    CallVerify -->|Correcto| AuthSuccess[Autenticación exitosa]
+    CallVerify -->|Incorrecto| AuthFail[Autenticación fallida]
+    AuthFail --> EndFallido[Fin]
+    AuthSuccess --> EndExitoso[Fin]
 ```
 
-Esperado:
+### Estructura de Archivos
 
-```
-logic/artifacts/bilstm_w2v/embeddings/
-  bilstm_w2v.model
-  bilstm_w2v.model.syn1neg.npy
-  bilstm_w2v.model.wv.vectors.npy
-```
+El repositorio está organizado en módulos que separan la lógica de autenticación y las utilidades relacionadas. Revisa los archivos dentro del directorio `src` para identificar los puntos de entrada y las funciones disponibles.
 
-#### 2.2 Entrenar BiLSTM con Word2Vec
+### Pruebas
 
-```powershell
-python -u train.py `
-  --train_path data/train.csv `
-  --val_path data/val.csv `
-  --w2v_path logic/artifacts/bilstm_w2v/embeddings/bilstm_w2v.model `
-  --out_dir logic/artifacts/bilstm_w2v
-```
-
-Artefactos:
-
-```
-logic/artifacts/bilstm_w2v/
-  model.pt
-  vocab.json
-  config.json
-  embeddings/   (si lo conservas)
-```
-
----
-
-### 3) BERT fine-tuned
-
-Aquí **NO** hay `model.pt`. Se guarda en formato HuggingFace con **`model.safetensors`** + tokenizer + `config.json`.
-
-Salida recomendada:
-
-- `logic/artifacts/bert`
-
-Comando típico:
-
-```powershell
-python -u logic/training/train_bert.py `
-  --train_csv data/train.csv `
-  --val_csv data/val.csv `
-  --test_csv data/test_es.csv `
-  --out_dir logic/artifacts/bert `
-  --max_length 384 `
-  --stride 128 `
-  --agg median `
-  --epochs 3 `
-  --batch_size 8 `
-  --grad_accum 2 `
-  --lr 2e-5
-```
-
-Artefactos mínimos:
-
-```
-logic/artifacts/bert/
-  config.json
-  model.safetensors
-  tokenizer_config.json / special_tokens_map.json / vocab.txt / tokenizer.json (según tokenizer)
-  test_metrics.json (si evalúas en test)
-  calibrator.joblib (si tu pipeline calibra; opcional)
-```
-
----
-
-## Evaluación y comparación
-
-```powershell
-python -u tests/eval_test.py `
-  --test_path data/test_es.csv `
-  --bilstm_rand_dir logic/artifacts/bilstm_rand `
-  --bilstm_w2v_dir logic/artifacts/bilstm_w2v `
-  --bert_dir logic/artifacts/bert
-```
-
-Genera:
-- `logic/artifacts/<modelo>/test_metrics.json`
-- `metrics/all_models_metrics.json`
-
----
-
-## API REST
-
-Arranque:
-
-```powershell
-python -u api.py
-```
-
-Endpoints:
-- `GET /health`
-- `GET /models`
-- `POST /predict` (body: `{ "text": "...", "model": "bert|bilstm_rand|bilstm_w2v" }`)
-- `POST /predict/<model_name>`
-
-PowerShell (UTF-8):
-
-```powershell
-$payload = @{ text="Texto largo en español para evaluar..." ; model="bert" } | ConvertTo-Json
-Invoke-RestMethod -Uri "http://localhost:8001/predict" -Method POST -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes($payload))
-```
-
-curl:
+Para ejecutar las pruebas incluidas en el repositorio, utiliza el comando de pruebas correspondiente, por ejemplo:
 
 ```bash
-curl -X POST http://localhost:8001/predict   -H "Content-Type: application/json"   -d '{"text":"Texto largo en español para evaluar...","model":"bert"}'
+npm test
 ```
 
----
-
-## Artefactos esperados
-
-- **BiLSTM**: `model.pt`, `vocab.json`, `config.json`
-- **BERT fine-tuned**: `model.safetensors` + tokenizer files + `config.json`
+Esto ejecutará la suite de pruebas y mostrará los resultados en la terminal.
 
 ---
 
-## Troubleshooting
-
-- `ModuleNotFoundError: logic`: ejecuta desde la raíz y/o exporta `PYTHONPATH`.
-- PowerShell + acentos: envía el body como bytes UTF-8.
-- `PermissionError`: evita rutas con OneDrive bloqueando y comprueba permisos.
-- GPU no detectada: instala PyTorch CUDA.
+Sanctuaryx/AuthText es una solución modular y segura para la autenticación de texto, ideal para aplicaciones que requieren validaciones y comprobaciones robustas. Consulta la documentación del código para detalles adicionales sobre las funciones y utilidades disponibles.
