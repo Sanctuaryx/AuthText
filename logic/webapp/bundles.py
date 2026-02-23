@@ -30,7 +30,7 @@ class ModelBundle:
     error: Optional[str] = None
 
     def ready(self) -> bool:
-        """True si el bundle está listo para inferencia."""
+        """True if the bundle is ready for inference."""
         return bool(self.loaded) and self.error is None
 
 
@@ -49,7 +49,6 @@ class BERTBundle(ModelBundle):
     """Container for a loaded Transformer detector and optional probability calibrator."""
     kind: ClassVar[str] = "bert"
 
-    # Mantengo defaults para compatibilidad con tu loader actual:
     name: str = "bert"
     model_dir: str = BERT_DIR
 
